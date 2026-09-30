@@ -29,7 +29,7 @@
 use syn::parse_quote;
 
 // --- Local Crate ---
-use crate::syns::{AttributePush, PathQualifierReplace, PushAttribute, ReplacePathQualifier};
+use crate::syns::{AttributePush, IdentReplace, PushAttribute, ReplaceIdent};
 
 // ===============================================================================
 // ```````````````````````````````` PROC-PIPELINE ````````````````````````````````
@@ -993,7 +993,7 @@ macro_rules! proc_pipeline {
 /// inner_support::Type
 /// ```
 ///
-/// The implementation is expressed in terms of [`PathQualifierReplace`] so that the
+/// The implementation is expressed in terms of [`IdentReplace`] so that the
 /// mechanism is independent of the particular `syn` syntax node being
 /// processed.
 ///
@@ -1114,7 +1114,7 @@ macro_rules! proc_pipeline {
 /// [`Self::delegate_crate`].
 ///
 /// The same mechanism can be used for any syntax representation implementing
-/// [`PathQualifierReplace`]. For example, the delegate attribute may receive a
+/// [`IdentReplace`]. For example, the delegate attribute may receive a
 /// [`syn::Item`], [`syn::DeriveInput`], or another supported syntax node and
 /// pass it directly to [`Self::delegate_inner`].
 ///
@@ -1127,7 +1127,7 @@ macro_rules! proc_pipeline {
 /// delegate_inner
 ///        │
 ///        │ obtains support_crate + delegate_crate
-/// PathQualifierReplace
+/// IdentReplace
 ///        │
 /// rewritten syntax
 /// ```
@@ -1181,14 +1181,14 @@ pub trait SupportCrate {
     /// ```
     ///
     /// See [`SupportCrate`] documentation to understand the semantics.
-    fn delegate_inner<T: PathQualifierReplace>(input: &mut T) {
+    fn delegate_inner<T: IdentReplace>(input: &mut T) {
         let Some(from) = Self::delegate_crate() else {
             return;
         };
 
         let to = Self::support_crate();
 
-        input.replace_path_qualifiers(&mut ReplacePathQualifier { from, to });
+        input.replace_ident(&mut ReplaceIdent { from, to });
     }
 
     /// Appends the configured delegate attribute to a syntax representation.
@@ -1218,7 +1218,7 @@ pub trait SupportCrate {
     /// Item delegation uses the same identifier-replacement mechanism as
     /// [`Self::delegate_inner`], because the item's syntax is available for
     /// direct inspection at the point where delegation is performed.
-    fn delegate_item<T: PathQualifierReplace>(input: &mut T) {
+    fn delegate_item<T: IdentReplace>(input: &mut T) {
         Self::delegate_inner(input);
     }
 }
