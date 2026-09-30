@@ -1,0 +1,1567 @@
+// SPDX-License-Identifier: MPL-2.0
+//
+// Part of Auguth Labs open-source softwares.
+// Built for the Rust Programming Language Ecosystem.
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) 2026 Auguth Labs (OPC) Pvt Ltd, India
+
+// ===============================================================================
+// `````````````````````````````` LAST INSTANCE IMPL `````````````````````````````
+// ===============================================================================
+
+//! Applies terminal-boundary corrections to affiliate projections
+//! generated during earlier implementation expansion phases.
+//!
+//! Previous implementation-side expansion generates a complete affiliate
+//! topology for every instance:
+//!
+//! - floor affiliates,
+//! - next affiliates,
+//! - back affiliates,
+//! - and affiliate consistency checkers.
+//!
+//! Those generated projections are intentionally optimistic because the
+//! expansion phase cannot yet know which instances represent terminal
+//! lineage boundaries.
+//!
+//! For example:
+//!
+//! ```text
+//! (0,0,0)
+//! (0,0,1)
+//! (0,0,2)
+//! (0,1,0)
+//! (0,2,0)
+//! (1,0,0)
+//! ```
+//!
+//! During ordinary expansion:
+//!
+//! ```text
+//! next(current)
+//! ```
+//!
+//! is generated under the assumption that a successor may exist, and
+//! floor affiliates continue propagating recursively toward future
+//! instances.
+//!
+//! Terminal instances invalidate those assumptions.
+//!
+//! This module identifies declared terminal boundaries and replaces the
+//! previously generated affiliate projections with boundary-aware
+//! definitions.
+//!
+//! ## What gets replaced
+//!
+//! Depending on the selected terminal counter dimension:
+//!
+//! - floor affiliate projections become concrete floor boundaries,
+//! - next affiliate projections become terminal successors,
+//! - back affiliate projections become boundary-aware predecessors,
+//! - affiliate invariant checkers become terminal-aware validators.
+//!
+//! ## Example
+//!
+//! Given:
+//!
+//! ```ignore
+//! #[last_instance(3)]
+//! impl Try<'a, 0, 0, 2, T, B> ...
+//! ```
+//!
+//! the third counter dimension is declared exhausted.
+//!
+//! Therefore:
+//!
+//! ```text
+//! (0,0,2)
+//! ```
+//!
+//! becomes the floor representative for that dimension, and its
+//! generated affiliate projections are rewritten accordingly.
+//!
+//! Likewise:
+//!
+//! ```ignore
+//! #[last_instance(1, 2, 3)]
+//! impl Try<'a, 1, 0, 0, T, B> ...
+//! ```
+//!
+//! resolves the most-significant counter dimension as the terminal
+//! boundary of the entire lineage.
+//!
+//! In that case:
+//!
+//! ```text
+//! next(current) = current
+//! ```
+//!
+//! and the affiliate checker is rewritten to omit successor-based
+//! validation.
+//!
+//! ## Relationship to Earlier Expansion
+//!
+//! This module does not construct affiliate topology from scratch.
+//!
+//! Instead it operates on metadata and affiliate items that already
+//! exist inside the implementation and selectively replaces them once
+//! terminal-boundary information becomes available.
+//!
+//! Conceptually:
+//!
+//! ```text
+//! implementation expansion
+//!          |
+//!          v
+//! optimistic affiliate topology
+//!          |
+//!          v
+//! terminal-boundary replacement
+//!          |
+//!          v
+//! finalized affiliate topology
+//! ```
+//!
+//! The resulting implementation contains affiliate projections that
+//! accurately model both ordinary lineage navigation and terminal
+//! boundary behavior.
+
+// ===============================================================================
+// ``````````````````````````````````` IMPORTS ```````````````````````````````````
+// ===============================================================================
+
+// -- Std Crate ---
+use std::fmt::Debug;
+
+// --- Proc Suite ---
+use proc_suite::{DuplicateCheck, IntList, SupportCrate, misc::*};
+
+// --- Proc Macro Crates ---
+use proc_macro2::{Span, TokenStream};
+use quote::{ToTokens, format_ident};
+use syn::{
+    Expr, Ident, ImplItem, ImplItemConst, ImplItemType, ItemImpl, Lit, LitInt, Stmt, Type,
+    parse_quote,
+};
+
+// --- Local Crate ---
+use crate::{
+    Extraction, Instance, Transformation, Utilization,
+    impls::{
+        affiliates::*,
+        counters::*,
+        errors::{LastBugs, LastErrors, LastInstanceErrors},
+        utils::*,
+    },
+    traits::{
+        affiliates::*,
+        idents::{CounterIdentExpectedHashChecker, CounterIdentHashCollectionGenArray},
+        meta::*,
+    },
+};
+
+// ===============================================================================
+// `````````````````````` ASSOC COUNTER ARGUMENTS EXTRACTION `````````````````````
+// ===============================================================================
+
+/// Reconstructs the original instance-counter arguments from metadata
+/// generated by a previously expanded proc-macro attribute.
+///
+/// The last-instance expansion operates after earlier implementation-side
+/// transformations have already completed.
+///
+/// At that stage the original counter arguments:
+///
+/// ```ignore
+/// Try<'a, 0, 1, 0, T, B>
+/// ```
+///
+/// are no longer directly available in a form suitable for extraction.
+///
+/// To make later expansion stages possible, an earlier attribute stores:
+///
+/// - counter generic indexes via [`CountersGenericsIndexesMeta`],
+/// - and original counter values via [`OriginalCounterConst`].
+///
+/// This extractor reads those generated associated items and rebuilds
+/// the original [`CounterArgs`] collection.
+///
+/// ## Example
+///
+/// Given:
+///
+/// ```ignore
+/// #[outer_attribute(1, 2, 3)]
+/// #[inner_attribute(3)]
+/// impl<'a, T, R, const B: bool>
+///     Try<'a, 0, 1, 0, T, B>
+///     for Phantom<R>
+/// {}
+/// ```
+///
+/// the outer attribute generates metadata conceptually equivalent to:
+///
+/// ```text
+/// CounterIndexesMeta = &[1, 2, 3]
+///
+/// OriginalCounterConst_1 = 0
+/// OriginalCounterConst_2 = 1
+/// OriginalCounterConst_3 = 0
+/// ```
+///
+/// allowing this extractor to reconstruct:
+///
+/// ```text
+/// [
+///     CounterArg {
+///         generic_index: 1,
+///         const_lit: 0,
+///     },
+///     CounterArg {
+///         generic_index: 2,
+///         const_lit: 1,
+///     },
+///     CounterArg {
+///         generic_index: 3,
+///         const_lit: 0,
+///     },
+/// ]
+/// ```
+///
+/// The recovered counters can then be used by later proc-macro stages
+/// exactly as if they had been extracted directly from the original
+/// implementation header.
+///
+/// ## Attribute Dependency
+///
+/// This extractor depends on metadata generated by another proc-macro
+/// attribute applied to the same implementation.
+///
+/// The generating attribute must appear as an outer attribute whose
+/// expansion executes before the attribute requesting
+/// [`CounterArgsAsAssoc`].
+///
+/// Valid:
+///
+/// ```ignore
+/// #[outer_attribute(...)]
+/// #[inner_attribute(...)]
+/// impl Try<'a, 0, 1, 0, T, B> for Phantom<R> {}
+/// ```
+///
+/// Invalid:
+///
+/// ```ignore
+/// #[inner_attribute(...)]
+/// impl Try<'a, 0, 1, 0, T, B> for Phantom<R> {}
+/// ```
+///
+/// In the latter case the required metadata does not exist, so the
+/// original counter arguments cannot be reconstructed.
+///
+/// A diagnostic is emitted indicating that the expected outer attribute
+/// expansion was not previously applied.
+#[derive(Debug, Clone)]
+pub(crate) struct CounterArgsAsAssoc(pub(crate) CounterArgs);
+
+impl Extraction<ItemImpl> for CounterArgsAsAssoc {
+    fn raw_extract(from: &ItemImpl, _: &()) -> Result<Self, proc_macro2::TokenStream> {
+        let mut indexes = Vec::new();
+        let indexes_meta_ident = gen_const_ident::<CountersGenericsIndexesMeta>();
+        let Ok(meta_item) = ImplConstItem::checked_utilize(from, &indexes_meta_ident) else {
+            return Err(LastErrors::InstanceImplMacroNotApplied {
+                exp: indexes_meta_ident,
+            }
+            .into());
+        };
+
+        let Expr::Reference(refr) = &meta_item.0.expr else {
+            return Err(LastBugs::CountersIndexesMetaNotARefExpr {}.into());
+        };
+        let Expr::Array(expr) = &*refr.expr else {
+            return Err(LastBugs::CountersIndexesMetaNotArrayExpr {}.into());
+        };
+        for elem in &expr.elems {
+            let Expr::Lit(expr) = elem else {
+                return Err(LastBugs::CountersIndexesMetaNotLitArrayExpr {}.into());
+            };
+            let Lit::Int(lit) = &expr.lit else {
+                return Err(LastBugs::CountersIndexesMetaNotLitIntArrayExpr {}.into());
+            };
+            indexes.push(lit.clone());
+        }
+
+        let mut collect = Vec::new();
+        for int in indexes.iter() {
+            let gen_idx = parse_pos_usize(int)?;
+            let ident = gen_const_ident_with_suffix::<OriginalCounterConst>(Some(
+                gen_idx.to_string().as_bytes(),
+            ));
+            let Ok(item) = ImplConstItem::checked_utilize(from, &ident) else {
+                return Err(LastErrors::InstanceImplMacroNotApplied {
+                    exp: indexes_meta_ident,
+                }
+                .into());
+            };
+            let Expr::Lit(expr) = &item.0.expr else {
+                return Err(LastBugs::OriginalCounterAssocNotLitExpr {}.into());
+            };
+            let Lit::Int(lit) = &expr.lit else {
+                return Err(LastBugs::OriginalCounterAssocNotLitIntExpr {}.into());
+            };
+            collect.push(CounterArg {
+                generic_index: gen_idx,
+                const_lit: lit.clone(),
+            })
+        }
+        if collect.is_empty() {
+            return Err(LastBugs::CollectedCounterArgsAssocIsEmpty {}.into());
+        }
+        Ok(Self(collect))
+    }
+
+    fn validate_extract(
+        &self,
+        from: &ItemImpl,
+        _: Option<&()>,
+    ) -> Result<(), proc_macro2::TokenStream> {
+        let args = &self.0;
+        if args.is_empty() {
+            return Err(LastBugs::CounterArgsPostValidateOnEmptyArgs {}.into());
+        }
+        for arg in args {
+            let ident = gen_const_ident_with_suffix::<OriginalCounterConst>(Some(
+                arg.generic_index.to_string().as_bytes(),
+            ));
+            let Ok(c) = ImplConstItem::checked_utilize(from, &ident) else {
+                return Err(LastBugs::RegainingOriginalCounterFailedOnPostValidate {}.into());
+            };
+
+            let Expr::Lit(lit) = &c.0.expr else {
+                return Err(LastBugs::RegainedOriginalCounterExprIsNotLit {}.into());
+            };
+
+            let Lit::Int(int) = &lit.lit else {
+                return Err(LastBugs::RegainedOriginalCounterExprIsNotLitInt {}.into());
+            };
+
+            if parse_pos_usize(int)? != parse_pos_usize(&arg.const_lit)? {
+                return Err(LastBugs::RegainedOriginalCounterExprNotMatch {}.into());
+            }
+        }
+        Ok(())
+    }
+}
+
+// ===============================================================================
+// ````````````````````````` LAST INSTANCE ARG REFINEMENT ````````````````````````
+// ===============================================================================
+
+/// Resolves the effective terminal counter dimension used by the
+/// last-instance expansion.
+///
+/// The attribute may optionally provide one or more counter generic
+/// indexes:
+///
+/// ```ignore
+/// #[_macro_(1, 3)]
+/// ```
+///
+/// These indexes do not directly become the result.
+///
+/// Instead, the extractor reconstructs the implementation's original
+/// counter arguments via [`CounterArgsAsAssoc`] and determines which
+/// supplied index corresponds to the earliest counter dimension within
+/// the instance counter hierarchy.
+///
+/// ## Example
+///
+/// Given:
+///
+/// ```ignore
+/// Try<'a, 0, 1, 0, T, B>
+/// ```
+///
+/// with reconstructed counters:
+///
+/// ```text
+/// generic index: 1 -> counter value 0
+/// generic index: 2 -> counter value 1
+/// generic index: 3 -> counter value 0
+/// ```
+///
+/// and:
+///
+/// ```ignore
+/// #[_macro_(2, 3)]
+/// ```
+///
+/// both indexes are valid counter dimensions.
+///
+/// Since counter index `2` appears before counter index `3` in the
+/// reconstructed counter ordering, the resolved terminal dimension is:
+///
+/// ```text
+/// 2
+/// ```
+///
+/// If no indexes are supplied:
+///
+/// ```ignore
+/// #[_macro_]
+/// ```
+///
+/// the first counter dimension is selected automatically.
+///
+/// This produces a single canonical counter index used by subsequent
+/// terminal-affiliate replacement logic.
+#[derive(Debug, Clone)]
+pub(crate) struct LastInstanceArg(pub(crate) LitInt);
+
+impl Extraction<ItemImpl, Option<&IntList>> for LastInstanceArg {
+    fn validate_context(context: &Option<&IntList>) -> Result<(), proc_macro2::TokenStream> {
+        let Some(list) = context else { return Ok(()) };
+        list.duplicate_check(Some(LastInstanceErrors::DuplicateCounterIndexes.into()))?;
+        Ok(())
+    }
+
+    fn raw_extract(
+        from: &ItemImpl,
+        context: &Option<&IntList>,
+    ) -> Result<Self, proc_macro2::TokenStream> {
+        if context.as_ref().is_none_or(|list| list.ints.is_empty()) {
+            let counters = CounterArgsAsAssoc::checked_extract(from, &())?.0;
+            let Some(counter) = counters.first() else {
+                return Err(LastBugs::CounterArgsAssocIsEmptyForFirstCounterAccess {}.into());
+            };
+            let lit = LitInt::new(&counter.generic_index.to_string(), Span::call_site());
+            return Ok(Self(lit));
+        }
+
+        // safe to unwrap
+        let list = context.unwrap();
+
+        if list.ints.len() == 1 {
+            let lit = list.ints.first().unwrap();
+            return Ok(Self(lit.clone()));
+        };
+
+        let counters = CounterArgsAsAssoc::checked_extract(from, &())?.0;
+
+        let available = {
+            let mut collect = Vec::new();
+            for c in &counters {
+                collect.push(c.generic_index.to_string());
+            }
+            let str = collect.join(" ,");
+            str
+        };
+
+        let mut best = None;
+
+        // this ensures all the given ints are indeed counter generic indexes
+        for int in &list.ints {
+            let lit = parse_pos_usize(int)?;
+            let mut found = false;
+            for (i, counter) in counters.iter().enumerate() {
+                if counter.generic_index == lit {
+                    found = true;
+                    if best.is_none() {
+                        best = Some(i);
+                    } else {
+                        let exist = best.unwrap();
+                        if i < exist {
+                            best = Some(i)
+                        }
+                    }
+                    break;
+                }
+            }
+            if !found {
+                return Err(LastErrors::NotACounterGenericIndex {
+                    invalid: int.clone(),
+                    available,
+                }
+                .into());
+            }
+        }
+
+        let Some(idx) = best else {
+            return Err(LastBugs::BestLastInstanceArgNotFound {}.into());
+        };
+
+        let lit = LitInt::new(
+            &counters.get(idx).unwrap().generic_index.to_string(),
+            Span::call_site(),
+        );
+        Ok(Self(lit))
+    }
+
+    fn validate_extract(
+        &self,
+        from: &ItemImpl,
+        context: Option<&Option<&IntList>>,
+    ) -> Result<(), proc_macro2::TokenStream> {
+        let counters = CounterArgsAsAssoc::checked_extract(from, &())?.0;
+        let given = parse_pos_usize(&self.0)?;
+        let mut found = false;
+        for c in &counters {
+            if c.generic_index == given {
+                found = true;
+                break;
+            }
+        }
+
+        if !found {
+            return Err(LastBugs::LastInstanceArgNotFoundInCountersMeta {}.into());
+        }
+
+        let Some(context) = context else {
+            return Ok(());
+        };
+
+        if Self::validate_context(context).is_err() {
+            return Err(LastBugs::LastInstanceArgFromDuplicateIndexes {}.into());
+        }
+
+        let Some(list) = context else {
+            let Some(first_counter) = counters.first() else {
+                return Err(LastBugs::CounterArgsAssocIsEmptyForFirstCounterAccess {}.into());
+            };
+            if first_counter.generic_index != given {
+                return Err(LastBugs::LastInstanceArgFromNoIndexesButNotFirstCounter {}.into());
+            }
+            return Ok(());
+        };
+
+        let mut found = false;
+        for int in &list.ints {
+            if *int == self.0 {
+                found = true;
+                break;
+            }
+        }
+
+        if !found {
+            return Err(LastBugs::LastInstanceArgNotFromCounterIndexes {}.into());
+        }
+        Ok(())
+    }
+}
+
+// ===============================================================================
+// ``````````````````````````` FLOOR AFFILIATE COUNTER ```````````````````````````
+// ===============================================================================
+
+/// Replaces recursive floor-affiliate projections with terminal floor
+/// boundaries.
+///
+/// During normal instance expansion (via [`ImplFloorAffiliatesCounters`]),
+/// floor affiliates recursively delegate to the next instance:
+///
+/// ```text
+/// floor_n(current)
+///     = floor_n(next(current))
+/// ```
+///
+/// allowing floor representatives to propagate forward until a boundary
+/// instance is reached.
+///
+/// The last-instance expansion terminates that recursion.
+///
+/// Given a selected terminal counter dimension, every floor affiliate
+/// associated with that counter and all following child counters is
+/// replaced with the current implementation's counter tuple.
+///
+/// ```text
+/// floor_n(current)
+///     = current
+/// ```
+///
+/// for:
+///
+/// ```text
+/// n >= terminal_dimension
+/// ```
+///
+/// ## Example
+///
+/// Assume:
+///
+/// ```text
+/// current = (2,0)
+/// ```
+///
+/// and:
+///
+/// ```ignore
+/// #[last_instance(0)]
+/// ```
+///
+/// resolves the first counter as the terminal dimension.
+///
+/// Before replacement:
+///
+/// ```text
+/// floor_0(current) -> floor_0(next(current))
+/// floor_1(current) -> floor_1(next(current))
+/// ```
+///
+/// After replacement:
+///
+/// ```text
+/// floor_0(current) = (2,0)
+/// floor_1(current) = (2,0)
+/// ```
+///
+/// making `(2,0)` the floor representative for both dimensions.
+///
+/// Likewise:
+///
+/// ```text
+/// current = (1,3,0)
+/// terminal_dimension = second counter
+/// ```
+///
+/// produces:
+///
+/// ```text
+/// floor_1(current) = (1,3,0)
+/// floor_2(current) = (1,3,0)
+/// ```
+///
+/// while earlier parent dimensions continue using their previously
+/// generated floor topology.
+///
+/// This replacement establishes concrete floor boundaries for the
+/// terminated counter lineage, allowing predecessor recovery and floor
+/// navigation to accurately resolve the floor representative of every
+/// counter dimension.
+///
+/// Consequently, any instance can obtain the floor of each individual
+/// counter without requiring further recursive expansion beyond the
+/// declared terminal boundary.
+#[derive(Debug, Clone)]
+pub(crate) struct FloorAffiliatesCountersReplacement;
+
+impl<'a> Transformation<ItemImpl, (CounterArgsSlice<'a>, &LitInt)>
+    for FloorAffiliatesCountersReplacement
+{
+    fn raw_transform(
+        &self,
+        transform: &mut ItemImpl,
+        context: &(CounterArgsSlice<'a>, &LitInt),
+    ) -> Result<(), proc_macro2::TokenStream> {
+        let counters = context.0;
+        let arg = &context.1;
+
+        let index = last_instance_arg_counter_index(arg, counters)?;
+
+        for (i, c) in counters.iter().enumerate() {
+            if i < index {
+                continue;
+            }
+
+            let ident = gen_type_ident_with_suffix::<FloorAffiliatesCounters>(Some(
+                c.generic_index.to_string().as_bytes(),
+            ));
+            let ty = ImplCountersTypeNum::checked_utilize(transform, &counters)?
+                .0
+                .clone();
+
+            replace_ty_with_given_counter_of_ident(&ident, transform, &ty)?;
+        }
+
+        Ok(())
+    }
+
+    fn validate_transform(
+        &self,
+        transform: &ItemImpl,
+        context: Option<&(CounterArgsSlice<'a>, &LitInt)>,
+    ) -> Result<(), proc_macro2::TokenStream> {
+        let extracted;
+        let (counters, arg) = {
+            match context {
+                Some(c) => (c.0, c.1.clone()),
+                None => {
+                    extracted = CounterArgsAsAssoc::checked_extract(transform, &())?.0;
+                    let counters_slc = extracted.as_slice();
+                    let arg = LastInstanceArg::checked_extract(transform, &None)?.0;
+                    (counters_slc, arg)
+                }
+            }
+        };
+
+        let index = last_instance_arg_counter_index(&arg, counters)?;
+
+        for (i, c) in counters.iter().enumerate() {
+            if i < index {
+                continue;
+            }
+
+            let ident = gen_type_ident_with_suffix::<FloorAffiliatesCounters>(Some(
+                c.generic_index.to_string().as_bytes(),
+            ));
+
+            let ty = ImplCountersTypeNum::checked_utilize(transform, &counters)?
+                .0
+                .clone();
+
+            let non_extension: Option<&Vec<ImplItemType>> = None;
+            validate_impl_types! {
+                items: non_extension,
+                towards: transform,
+                ident: ident,
+                ty: ty,
+                errors: {
+                    not_found: LastBugs::FloorAffiliatesCountersReplacementNotFound {},
+                    wrong_ident: LastBugs::FloorAffiliatesCountersReplacementWrongIdent {},
+                    wrong_ty: LastBugs::FloorAffiliatesCountersReplacementInvalidType {},
+                    has_generics: LastBugs::FloorAffiliatesCountersReplacementHasGenerics {},
+                }
+            };
+        }
+        Ok(())
+    }
+}
+
+/// Finds the counter position corresponding to a selected
+/// counter generic index.
+fn last_instance_arg_counter_index<'a>(
+    arg: &LitInt,
+    counters: CounterArgsSlice<'a>,
+) -> Result<usize, TokenStream> {
+    let index = 'search: {
+        let given = parse_pos_usize(&arg)?;
+        for (i, counter) in counters.iter().enumerate() {
+            if counter.generic_index == given {
+                break 'search i;
+            }
+        }
+
+        return Err(LastBugs::InvalidLastInstanceArgGiven {}.into());
+    };
+    Ok(index)
+}
+
+/// Replaces an existing associated type of an ident with the given type.
+///
+/// Fails if its not found.
+fn replace_ty_with_given_counter_of_ident(
+    ident: &Ident,
+    impl_of: &mut ItemImpl,
+    ty: &Type,
+) -> Result<(), TokenStream> {
+    let cloned_items = impl_of.items.clone();
+
+    let impl_items = &mut impl_of.items;
+
+    let mut removed = false;
+    for (i, item) in cloned_items.iter().enumerate() {
+        let ImplItem::Type(t) = item else {
+            continue;
+        };
+        if t.ident == *ident {
+            impl_items.remove(i);
+            removed = true;
+            break;
+        }
+    }
+
+    if !removed {
+        return Err(
+            LastErrors::AnExistingAffiliatesCountersTypeUnavailableToReplace {
+                ident: ident.clone(),
+            }
+            .into(),
+        );
+    }
+
+    let item = ImplItemType {
+        attrs: proc_suite::internal_code(),
+        ident: ident.clone(),
+        ty: ty.clone(),
+        vis: syn::Visibility::Inherited,
+        defaultness: None,
+        generics: Default::default(),
+        eq_token: Default::default(),
+        semi_token: Default::default(),
+        type_token: Default::default(),
+    };
+
+    impl_items.push(ImplItem::Type(item));
+
+    Ok(())
+}
+
+// ===============================================================================
+// ```````````````````````````` NEXT AFFILIATE COUNTER ```````````````````````````
+// ===============================================================================
+
+/// Replaces the optimistic next-affiliate projection with the concrete
+/// successor produced by a terminal boundary.
+///
+/// During normal affiliate expansion, [`ImplNextAffiliateCounter`] is derived
+/// by incrementing the least-significant counter dimension.
+///
+/// Terminal instances cannot always use that optimistic successor.
+/// Instead, the selected terminal counter dimension defines where the
+/// carry operation stops.
+///
+/// This is the later phase which is suggessted in [`ImplNextAffiliateCounter`].
+///
+/// ```text
+/// before:
+///
+/// (a,b,c)
+///      +1
+///       ^
+/// least-significant counter
+/// ```
+///
+/// becomes:
+///
+/// ```text
+/// carry into parent boundary
+/// reset all child counters
+/// ```
+///
+/// ## Example
+///
+/// Given:
+///
+/// ```text
+/// current = (1,2,3)
+/// ```
+///
+/// and:
+///
+/// ```ignore
+/// #[_macro_(1)]
+/// ```
+///
+/// where counter `1` resolves to the second counter dimension:
+///
+/// ```text
+/// (1,2,3)
+///   ^
+/// boundary
+/// ```
+///
+/// the generated next affiliate becomes:
+///
+/// ```text
+/// (2,0,0)
+/// ```
+///
+/// The parent boundary counter is incremented and all following child
+/// counters are reset.
+///
+/// Likewise:
+///
+/// ```text
+/// current = (4,7,9)
+/// boundary = third counter
+/// ```
+///
+/// produces:
+///
+/// ```text
+/// (4,8,0)
+/// ```
+///
+/// ## Root Boundary
+///
+/// If the selected boundary is the most-significant counter dimension,
+/// no parent counter exists to receive the carry.
+///
+/// In that case:
+///
+/// ```text
+/// next(current) = current
+/// ```
+///
+/// making the instance its own successor and marking the end of the
+/// instance lineage.
+#[derive(Debug, Clone)]
+pub(crate) struct NextAffiliateCounterReplacement;
+
+impl<'a> Transformation<ItemImpl, (CounterArgsSlice<'a>, &LitInt)>
+    for NextAffiliateCounterReplacement
+{
+    fn raw_transform(
+        &self,
+        transform: &mut ItemImpl,
+        context: &(CounterArgsSlice<'a>, &LitInt),
+    ) -> Result<(), proc_macro2::TokenStream> {
+        let counters = context.0;
+        let arg = &context.1;
+
+        let index = last_instance_arg_counter_index(&arg, counters)?;
+
+        let ty = match index == 0 {
+            true => ImplCountersTypeNum::checked_utilize(transform, &counters)?
+                .0
+                .clone(),
+            false => next_affiliate_counter_replacement_ty(index, counters)?,
+        };
+        let ident = gen_type_ident::<NextAffiliateCounters>();
+
+        replace_ty_with_given_counter_of_ident(&ident, transform, &ty)?;
+
+        Ok(())
+    }
+
+    fn validate_transform(
+        &self,
+        transform: &ItemImpl,
+        context: Option<&(CounterArgsSlice<'a>, &LitInt)>,
+    ) -> Result<(), proc_macro2::TokenStream> {
+        let extracted;
+        let (counters, arg) = {
+            match context {
+                Some(c) => (c.0, c.1.clone()),
+                None => {
+                    extracted = CounterArgsAsAssoc::checked_extract(transform, &())?.0;
+                    let counters_slc = extracted.as_slice();
+                    let arg = LastInstanceArg::checked_extract(transform, &None)?.0;
+                    (counters_slc, arg)
+                }
+            }
+        };
+        let index = last_instance_arg_counter_index(&arg, counters)?;
+        let ty = match index == 0 {
+            true => ImplCountersTypeNum::checked_utilize(transform, &counters)?
+                .0
+                .clone(),
+            false => next_affiliate_counter_replacement_ty(index, counters)?,
+        };
+        let ident = gen_type_ident::<NextAffiliateCounters>();
+
+        validate_impl_type! {
+            item: None,
+            towards: transform,
+            ident: ident,
+            ty: ty,
+            errors: {
+                not_found: LastBugs::NextAffiliatesCountersReplacementNotFound {},
+                wrong_ident: LastBugs::NextAffiliatesCountersReplacementWrongIdent {},
+                wrong_ty: LastBugs::NextAffiliatesCountersReplacementInvalidType {},
+                has_generics: LastBugs::NextAffiliatesCountersReplacementHasGenerics {},
+            }
+        }
+    }
+}
+
+/// Computes the concrete successor counter tuple produced by a terminal
+/// boundary carry operation.
+///
+/// The counter immediately preceding the terminal dimension is
+/// incremented, while the terminal dimension and all following child
+/// dimensions are reset to zero.
+fn next_affiliate_counter_replacement_ty<'a>(
+    arg_counter_index: usize,
+    counters: CounterArgsSlice<'a>,
+) -> Result<Type, TokenStream> {
+    let mut collect = Vec::<Type>::new();
+    let crate_of = Instance::support_crate();
+
+    for (i, c) in counters.iter().enumerate() {
+        let lit = parse_pos_usize(&c.const_lit)?;
+
+        let next = if i < arg_counter_index.saturating_sub(1) {
+            // more-significant counters stay unchanged
+            lit
+        } else if i == arg_counter_index.saturating_sub(1) {
+            // immediate carry target
+            lit + 1
+        } else {
+            // terminal counter and all less-significant counters reset
+            0
+        };
+
+        let typenum = format_ident!("U{}", next);
+        collect.push(parse_quote!(#crate_of::#typenum));
+    }
+
+    let ty = parse_quote! {
+        (#(#collect),*)
+    };
+
+    Ok(ty)
+}
+
+// ===============================================================================
+// ```````````````````````````` BACK AFFILIATE COUNTER ```````````````````````````
+// ===============================================================================
+
+/// Replaces the generic back-affiliate projection with a terminal
+/// boundary aware predecessor projection.
+///
+/// The normal back-affiliate algorithm via [`ImplBackAffiliateCounter`] resolves:
+///
+/// ```text
+/// if current == global_min
+///     current
+///
+/// else if next(reverse) == current
+///     reverse
+///
+/// else
+///     floor(k, reverse)
+/// ```
+///
+/// where `k` determines which floor affiliate of the reverse instance
+/// should be used when direct predecessor adjacency cannot be proven.
+///
+/// During ordinary expansion in [`ImplBackAffiliateCounter`], `k` defaults
+/// to the least-significant counter dimension.
+///
+/// Terminal boundaries require a more precise floor counter.
+///
+/// Given a selected boundary counter:
+///
+/// ```text
+/// k
+/// ```
+///
+/// the replacement chooses:
+///
+/// ```text
+/// child(k)
+/// ```
+///
+/// whenever a child counter exists.
+///
+/// Otherwise:
+///
+/// ```text
+/// k
+/// ```
+///
+/// itself is used.
+///
+/// The resulting counter is supplied as the floor counter argument to
+/// the standard back-affiliate resolver.
+///
+/// ## Example
+///
+/// Assume:
+///
+/// ```text
+/// current = (0,2,0)
+/// ```
+///
+/// and the second counter is declared as a terminal boundary:
+///
+/// ```text
+/// (0,1,0)
+/// (0,1,1)
+/// (0,1,2)
+///     |
+///     v
+/// (0,2,0)
+/// ```
+///
+/// If direct predecessor recovery fails:
+///
+/// ```text
+/// next(reverse) != current
+/// ```
+///
+/// the back-affiliate algorithm falls through to:
+///
+/// ```text
+/// floor(k, reverse)
+/// ```
+///
+/// Using the boundary counter itself:
+///
+/// ```text
+/// k = second counter
+/// ```
+///
+/// would recover the floor representative of the second-counter
+/// lineage.
+///
+/// Instead, the replacement selects:
+///
+/// ```text
+/// k = third counter
+/// ```
+///
+/// causing the resolver to use:
+///
+/// ```text
+/// floor(third_counter, reverse)
+/// ```
+///
+/// which corresponds to the child lineage that was exhausted
+/// immediately before the carry into the boundary counter.
+///
+/// This preserves correct predecessor recovery across terminal
+/// boundaries while continuing to reuse the standard
+/// [`BackAffiliateCounters`] resolution algorithm.
+#[derive(Debug, Clone)]
+pub(crate) struct BackAffiliatesCountersReplacement;
+
+impl<'a> Transformation<ItemImpl, (CounterArgsSlice<'a>, &LitInt)>
+    for BackAffiliatesCountersReplacement
+{
+    fn raw_transform(
+        &self,
+        transform: &mut ItemImpl,
+        context: &(CounterArgsSlice<'a>, &LitInt),
+    ) -> Result<(), proc_macro2::TokenStream> {
+        let counters = context.0;
+        let arg = &context.1;
+
+        let index = last_instance_arg_counter_index(&arg, counters)?;
+        let Some(counter) = counters.get(index) else {
+            return Err(LastBugs::LastInstanceArgIndexCannotFetchItsConstLit {}.into());
+        };
+
+        let ident = gen_type_ident::<BackAffiliateCounters>();
+
+        // go back check if child exists, else you are the child
+        let counter = match counters.get(index + 1) {
+            Some(c) => c,
+            None => counter,
+        };
+
+        let ty = back_counters_typenum_arg(transform, counters, Some(counter))?;
+
+        replace_ty_with_given_counter_of_ident(&ident, transform, &ty)?;
+
+        Ok(())
+    }
+
+    fn validate_transform(
+        &self,
+        transform: &ItemImpl,
+        context: Option<&(CounterArgsSlice<'a>, &LitInt)>,
+    ) -> Result<(), proc_macro2::TokenStream> {
+        let extracted;
+        let (counters, arg) = {
+            match context {
+                Some(c) => (c.0, c.1.clone()),
+                None => {
+                    extracted = CounterArgsAsAssoc::checked_extract(transform, &())?.0;
+                    let counters_slc = extracted.as_slice();
+                    let arg = LastInstanceArg::checked_extract(transform, &None)?.0;
+                    (counters_slc, arg)
+                }
+            }
+        };
+        let index = last_instance_arg_counter_index(&arg, counters)?;
+        let Some(counter) = counters.get(index) else {
+            return Err(LastBugs::LastInstanceArgIndexCannotFetchItsConstLit {}.into());
+        };
+
+        // go back check if child exists, else you are the child
+        let counter = match counters.get(index + 1) {
+            Some(c) => c,
+            None => counter,
+        };
+
+        let ident = gen_type_ident::<BackAffiliateCounters>();
+        let ty = back_counters_typenum_arg(transform, counters, Some(counter))?;
+
+        validate_impl_type! {
+            item: None,
+            towards: transform,
+            ident: ident,
+            ty: ty,
+            errors: {
+                not_found: LastBugs::BackAffiliatesCountersReplacementNotFound {},
+                wrong_ident: LastBugs::BackAffiliatesCountersReplacementWrongIdent {},
+                wrong_ty: LastBugs::BackAffiliatesCountersReplacementInvalidType {},
+                has_generics: LastBugs::BackAffiliatesCountersReplacementHasGenerics {},
+            }
+        }
+    }
+}
+
+// ===============================================================================
+// `````````````````````````` AFFILIATE COUNTERS CHECKER `````````````````````````
+// ===============================================================================
+
+/// Replaces the affiliate consistency checker for the terminal
+/// root-boundary instance.
+///
+/// Ordinary instances verify:
+///
+/// ```text
+/// back(next(current)) == current
+/// next(back(current)) == current
+/// ```
+///
+/// Global-minimum instances already omit the first check because no
+/// predecessor exists:
+///
+/// ```text
+/// next(back(current))
+/// ```
+///
+/// cannot be formed at the beginning of a lineage.
+///
+/// Likewise, the terminal root-boundary instance cannot form:
+///
+/// ```text
+/// back(next(current))
+/// ```
+///
+/// because no successor exists beyond the end of the lineage.
+///
+/// During normal expansion (via [`ImplAffiliateCountersChecker`])
+/// the checker cannot know which instance is the true terminal representative.
+/// This transformation identifies that boundary and replaces the generated
+/// checker with a terminal-aware variant.
+///
+/// The replacement is only applied when the selected boundary
+/// corresponds to the most-significant counter dimension, since only
+/// that boundary represents the end of the entire instance lineage.
+///
+/// After replacement the checker verifies only:
+///
+/// ```text
+/// next(back(current)) == current
+/// ```
+///
+/// while the successor-based invariant is omitted.
+///
+/// This preserves compile-time validation of the canonical instance
+/// chain while avoiding invalid successor checks beyond the terminal
+/// boundary.
+#[derive(Debug, Clone)]
+pub(crate) struct AffiliateCountersCheckerReplacement;
+
+impl<'a> Transformation<ItemImpl, (CounterArgsSlice<'a>, &LitInt)>
+    for AffiliateCountersCheckerReplacement
+{
+    fn raw_transform(
+        &self,
+        transform: &mut ItemImpl,
+        context: &(CounterArgsSlice<'a>, &LitInt),
+    ) -> Result<(), proc_macro2::TokenStream> {
+        let counters = context.0;
+        let given = parse_pos_usize(&context.1)?;
+
+        let Some(first) = counters.first() else {
+            return Err(LastBugs::CounterArgsAssocIsEmptyForFirstCounterAccess {}.into());
+        };
+
+        if first.generic_index != given {
+            return Ok(());
+        }
+
+        let ident = gen_const_ident::<AffiliateCountersChecker>();
+        let ty = parse_quote!(());
+        let expr = counters_invariants_checker(transform, counters, true)?;
+
+        replace_const_with_given_expr_of_ident(&ident, transform, &ty, &expr)?;
+
+        Ok(())
+    }
+
+    fn validate_transform(
+        &self,
+        transform: &ItemImpl,
+        context: Option<&(CounterArgsSlice<'a>, &LitInt)>,
+    ) -> Result<(), proc_macro2::TokenStream> {
+        let extracted;
+        let (counters, arg) = {
+            match context {
+                Some(c) => (c.0, c.1.clone()),
+                None => {
+                    extracted = CounterArgsAsAssoc::checked_extract(transform, &())?.0;
+                    let counters_slc = extracted.as_slice();
+                    let arg = LastInstanceArg::checked_extract(transform, &None)?.0;
+                    (counters_slc, arg)
+                }
+            }
+        };
+
+        let Some(first) = counters.first() else {
+            return Err(LastBugs::CounterArgsAssocIsEmptyForFirstCounterAccess {}.into());
+        };
+
+        if first.generic_index != parse_pos_usize(&arg)? {
+            return Ok(());
+        }
+
+        let ident = gen_const_ident::<AffiliateCountersChecker>();
+        let ty: Type = parse_quote!(());
+        let expr = counters_invariants_checker(transform, counters, true)?;
+
+        validate_impl_const! {
+            item: None,
+            towards: transform,
+            ident: ident,
+            ty: ty,
+            expr: expr,
+            errors: {
+                not_found: LastBugs::AffiliateCountersCheckerReplacementNotFound {},
+                wrong_ident: LastBugs::AffiliateCountersCheckerReplacementWrongIdent {},
+                wrong_ty: LastBugs::AffiliateCountersCheckerReplacementInvalidType {},
+                has_generics: LastBugs::AffiliateCountersCheckerReplacementHasGenerics {},
+                invalid_expr: LastBugs::AffiliateCountersCheckerReplacementInvalidExpr {},
+            }
+        }
+    }
+}
+
+/// Replaces an existing associated const of an ident with the given type and expr.
+///
+/// Fails if its not found.
+fn replace_const_with_given_expr_of_ident(
+    ident: &Ident,
+    impl_of: &mut ItemImpl,
+    ty: &Type,
+    expr: &Expr,
+) -> Result<(), TokenStream> {
+    let cloned_items = impl_of.items.clone();
+
+    let impl_items = &mut impl_of.items;
+
+    let mut removed = false;
+    for (i, item) in cloned_items.iter().enumerate() {
+        let ImplItem::Const(c) = item else {
+            continue;
+        };
+        if c.ident == *ident {
+            impl_items.remove(i);
+            removed = true;
+            break;
+        }
+    }
+    if !removed {
+        return Err(LastErrors::AnExistingAssocConstUnavailableToReplace {
+            ident: ident.clone(),
+        }
+        .into());
+    }
+
+    let item = ImplItemConst {
+        attrs: proc_suite::internal_code(),
+        ident: ident.clone(),
+        ty: ty.clone(),
+        expr: expr.clone(),
+        vis: syn::Visibility::Inherited,
+        defaultness: None,
+        generics: Default::default(),
+        eq_token: Default::default(),
+        semi_token: Default::default(),
+        const_token: Default::default(),
+        colon_token: Default::default(),
+    };
+
+    impl_items.push(ImplItem::Const(item));
+
+    Ok(())
+}
+
+// ===============================================================================
+// `````````````````````````` CUMULATED CONST CHECKER ``````````````````````````
+// ===============================================================================
+
+/// Replaces the placeholder [`CumulatedConstChecker`] on the terminal
+/// instance with the complete validation graph.
+///
+/// Only the terminal instance can safely act as the global validation
+/// entry point because all affiliate boundaries have already been
+/// established.
+///
+/// ## What gets accumulated
+///
+/// The generated expression forces evaluation of:
+///
+/// - [`CountersGenericsChecker`],
+/// - [`AffiliateCountersChecker`],
+/// - [`CounterIdentHashCollectionGenArray`] per counter,
+/// - [`CounterIdentExpectedHashChecker`],
+///
+/// and any recursive validation performed by those checkers.
+///
+/// ## Recursive Validation
+///
+/// Several accumulated checkers recursively evaluate their predecessor
+/// equivalents:
+///
+/// ```text
+/// Current
+///     -> Back(Current)
+///         -> Back(Back(Current))
+///             -> ...
+///                 -> GlobalMin
+/// ```
+///
+/// Consequently, evaluating the terminal instance's
+/// [`CumulatedConstChecker`] validates the entire reachable affiliate
+/// lineage rather than only the current instance.
+///
+/// ## Why replacement is required
+///
+/// Ordinary instances intentionally emit:
+///
+/// ```text
+/// CumulatedConstChecker = ()
+/// ```
+///
+/// because they cannot know whether additional affiliate boundaries
+/// will be introduced later.
+///
+/// The terminal-instance expansion replaces that placeholder with the
+/// final accumulated validation expression, creating a single compile-
+/// time entry point for all generated checks.
+#[derive(Debug, Clone)]
+pub(super) struct CumulatedConstCheckerReplacement;
+
+impl<'a> Transformation<ItemImpl, (CounterArgsSlice<'a>, &LitInt)>
+    for CumulatedConstCheckerReplacement
+{
+    fn raw_transform(
+        &self,
+        transform: &mut ItemImpl,
+        context: &(CounterArgsSlice<'a>, &LitInt),
+    ) -> Result<(), proc_macro2::TokenStream> {
+        let counters = context.0;
+        let given = parse_pos_usize(&context.1)?;
+
+        let Some(first) = counters.first() else {
+            return Err(LastBugs::CounterArgsAssocIsEmptyForFirstCounterAccess {}.into());
+        };
+
+        if first.generic_index != given {
+            return Ok(());
+        }
+
+        let ident = gen_const_ident::<CumulatedConstChecker>();
+        let ty = parse_quote!(());
+        let expr = cumulated_checker_expr(transform, counters)?;
+
+        replace_const_with_given_expr_of_ident(&ident, transform, &ty, &expr)?;
+
+        Ok(())
+    }
+
+    fn validate_transform(
+        &self,
+        transform: &ItemImpl,
+        context: Option<&(CounterArgsSlice<'a>, &LitInt)>,
+    ) -> Result<(), proc_macro2::TokenStream> {
+        let extracted;
+        let (counters, arg) = {
+            match context {
+                Some(c) => (c.0, c.1.clone()),
+                None => {
+                    extracted = CounterArgsAsAssoc::checked_extract(transform, &())?.0;
+                    let counters_slc = extracted.as_slice();
+                    let arg = LastInstanceArg::checked_extract(transform, &None)?.0;
+                    (counters_slc, arg)
+                }
+            }
+        };
+
+        let Some(first) = counters.first() else {
+            return Err(LastBugs::CounterArgsAssocIsEmptyForFirstCounterAccess {}.into());
+        };
+
+        if first.generic_index != parse_pos_usize(&arg)? {
+            return Ok(());
+        }
+
+        let ident = gen_const_ident::<CumulatedConstChecker>();
+        let ty: Type = parse_quote!(());
+        let expr = cumulated_checker_expr(transform, counters)?;
+
+        validate_impl_const! {
+            item: None,
+            towards: transform,
+            ident: ident,
+            ty: ty,
+            expr: expr,
+            errors: {
+                not_found: LastBugs::AffiliateCountersCheckerReplacementNotFound {},
+                wrong_ident: LastBugs::AffiliateCountersCheckerReplacementWrongIdent {},
+                wrong_ty: LastBugs::AffiliateCountersCheckerReplacementInvalidType {},
+                has_generics: LastBugs::AffiliateCountersCheckerReplacementHasGenerics {},
+                invalid_expr: LastBugs::AffiliateCountersCheckerReplacementInvalidExpr {},
+            }
+        }
+    }
+}
+
+/// Builds the terminal validation accumulator expression.
+///
+/// The generated expression forces evaluation of all top-level
+/// validation phases associated with the current instance.
+///
+/// Several of those phases recursively validate predecessor instances,
+/// causing validation to propagate through the complete back-affiliate
+/// chain until the global-minimum instance is reached.
+///
+/// Conceptually:
+///
+/// ```text
+/// CumulatedConstChecker
+///     -> GenericsChecker
+///     -> AffiliateChecker
+///     -> IdentifierHashCollections
+///     -> IdentifierLineageChecker
+/// ```
+///
+/// where each checker may recursively evaluate its predecessor
+/// counterpart.
+///
+/// The resulting expression serves as the root compile-time validation
+/// entry point for the entire instance graph.
+fn cumulated_checker_expr<'a>(
+    impl_of: &ItemImpl,
+    counters: CounterArgsSlice<'a>,
+) -> Result<Expr, TokenStream> {
+    let mut collect = Vec::new();
+
+    let generics_checker_ident = gen_const_ident::<CountersGenericsChecker>();
+    let generics_checker =
+        AssocTyExpr::checked_extract(&(impl_of, &generics_checker_ident), &())?.0;
+    collect.push(generics_checker);
+
+    let afl_checker_ident = gen_const_ident::<AffiliateCountersChecker>();
+    let afl_checker = AssocTyExpr::checked_extract(&(impl_of, &afl_checker_ident), &())?.0;
+    collect.push(afl_checker);
+
+    for c in counters {
+        let gen_idx_str = c.generic_index.to_string();
+        let gen_idx_bytes = gen_idx_str.as_bytes();
+
+        let hash_collection_ident =
+            gen_const_ident_with_suffix::<CounterIdentHashCollectionGenArray>(Some(gen_idx_bytes));
+        let hash_collection =
+            AssocTyExpr::checked_extract(&(impl_of, &hash_collection_ident), &())?.0;
+
+        collect.push(hash_collection);
+    }
+
+    let hash_checker_ident = gen_const_ident::<CounterIdentExpectedHashChecker>();
+    let hash_checker = AssocTyExpr::checked_extract(&(impl_of, &hash_checker_ident), &())?.0;
+    collect.push(hash_checker);
+
+    let stmts = collect.iter().map(|expr: &Expr| -> Stmt {
+        parse_quote! {
+            let _ = #expr;
+        }
+    });
+
+    let expr = parse_quote!({
+        #(#stmts)*
+        ()
+    });
+
+    Ok(expr)
+}

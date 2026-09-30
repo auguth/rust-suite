@@ -1,0 +1,22 @@
+[package]
+name = "instances"
+version = "0.1.0"
+description = "The Instance Macros Access Crate (Low-Level)"
+readme = "README.md"
+keywords = ["rust", "inst", "instance", "proc-macro",]
+documentation = "https://auguth.github.io/rust-suite/rust-doc/instances/index.html"
+
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+edition.workspace = true
+
+[dependencies]
+instances-macros.workspace = true
+typenum.workspace = true
+generic-array.workspace = true
+
+[features]
+default = ["std"]
+std = []
+dev = ["instances-macros/dev"]

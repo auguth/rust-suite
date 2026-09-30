@@ -1,0 +1,25 @@
+[package]
+name = "proc-suite"
+version = "0.1.0"
+description = "Rust's procedural macro building suite with utilities for framework-level macros"
+readme = "README.md"
+keywords = ["rust", "proc-macro", "tool",]
+documentation = "https://auguth.github.io/rust-suite/rust-doc/proc_suite/index.html"
+
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+edition.workspace = true
+
+[dependencies]
+syn.workspace = true
+quote.workspace = true
+proc-macro2.workspace = true
+urlencoding.workspace = true
+rustc_version_runtime.workspace = true
+prettyplease.workspace = true
+
+[features]
+default = ["std"]
+std = []
+dev = []

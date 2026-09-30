@@ -1,0 +1,27 @@
+[package]
+name = "instances-macros"
+version = "0.1.0"
+description = "The Instance Macros Core Proc Macros Crate (only use via `instances` crate)"
+readme = "README.md"
+keywords = ["rust", "inst", "instance", "proc-macro",]
+documentation = "https://auguth.github.io/rust-suite/rust-doc/instances_macros/index.html"
+
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+edition.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn.workspace = true
+quote.workspace = true
+proc-suite.workspace = true
+proc-macro2.workspace = true
+const_format.workspace = true
+paste.workspace = true
+
+[features]
+default = []
+dev = ["proc-suite/dev"]

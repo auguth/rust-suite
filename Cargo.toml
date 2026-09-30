@@ -1,0 +1,30 @@
+[workspace.package]
+license = "MPL-2.0"
+authors = ["Auguth Labs"]
+homepage = "https://github.com/auguth"
+repository = "https://github.com/auguth/rust-suite.git"
+edition = "2024"
+
+[workspace]
+members = ["proc-suite", "instances-macros", "instances", "inst-macros", "inst"]
+
+[workspace.dependencies]
+proc-suite = {path="./proc-suite"}
+instances-macros = {path="./instances-macros"}
+inst-macros = {path="./inst-macros"}
+inst = {path="./inst"}
+instances= {path="./instances"}
+syn = { version = "2.0", features = ["extra-traits", "visit", "visit-mut"] }
+quote = { version = "1.0" }
+proc-macro2 = { version = "1.0" }
+once_cell = { version = "1.21"}
+heck = {version="0.4"}
+rand = {version="0.8"}
+owo-colors = {version="4"}
+urlencoding = {version="2"}
+rustc_version_runtime = {version="0.3"}
+const_format = {version="0.2"}
+typenum = {version="1"}
+generic-array = {version="1"}
+paste = {version="1"}
+prettyplease = {version="0.2"}
