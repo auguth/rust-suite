@@ -821,21 +821,6 @@ impl<'a> Transformation<AddonSpace<'a>, Option<IdentList>> for ItemTypeInst {
         let node = Inst::node();
         let tuple = Inst::tuple();
 
-        struct VisitIdent {
-            exp: Ident,
-            found: Option<Ident>
-        }
-
-        impl<'ast> Visit<'ast> for VisitIdent {
-            fn visit_ident(&mut self, i: &'ast proc_macro2::Ident) {
-                if *i == self.exp {
-                    self.found = Some(i.clone());
-                }
-                return 
-            }
-        }
-
-        let trait_ident = &trait_.ident;
         let mut found = false;
 
         for item in &trait_.items {
@@ -878,13 +863,6 @@ impl<'a> Transformation<AddonSpace<'a>, Option<IdentList>> for ItemTypeInst {
                     }
 
                     if node.is_some() || tuple.is_some() {
-                        if context.is_some() {
-                            let mut visitor = VisitIdent {exp: trait_ident.clone(), found: None};
-                            visitor.visit_trait_item_type(&t);
-                            if let Some(ident) = visitor.found {
-                                return Err(TraitError::InstTraitOverflowReference {ident}.into());
-                            }
-                        }
                         found = true;
                     }
                 }

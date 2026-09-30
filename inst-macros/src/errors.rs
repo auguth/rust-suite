@@ -167,7 +167,6 @@ error_spaces! {
             ExpectedInstTraitNodeBound,
             ParenthesizedInstTraitNodeBound,
             Max4Params,
-            InstTraitOverflowReference,
             TransformedFileDoesNotHaveDocTarget,
             TransformedFileDoesNotHaveNotDocTarget,
             NotDocTargetDoesNotHaveDocs,
@@ -781,18 +780,6 @@ diagnostics!(
             span: { tokens: idents },
             help: [
                 "remove excessive params",
-            ],
-        },
-        InstTraitOverflowReference  {
-            fields: {
-                ident: Ident,
-            },
-            msg: "instance node or tuple cannot self reference its encompassing instance trait itself",
-            tags: [Unsupported],
-            span: { tokens: ident },
-            help: [
-                "remove the trait overflowing reference",
-                "use aliasing if intended to be different trait with same ident",
             ],
         },
         SumNoArgs {
