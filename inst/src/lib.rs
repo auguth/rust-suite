@@ -23,7 +23,6 @@ pub mod r#impl;
 pub mod r#mod;
 pub mod node;
 pub mod sum;
-pub mod tuple;
 pub mod misc;
 pub mod r#trait;
 
@@ -48,6 +47,4 @@ pub use node::*;
 pub use misc::*;
 #[allow(unused)]
 pub use sum::*;
-#[allow(unused)]
-pub use tuple::*;
 

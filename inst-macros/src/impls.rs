@@ -24,13 +24,9 @@
 //! and subscriber node representations. Publisher nodes receive generated
 //! [`NodeArgs`], while qualified trait projections are marked as subscriber
 //! nodes.
-//! 
-//! Instance-tuple associated types are transformed separately into instance
-//! node representations and additional addon implementations and enum
-//! representations for tuples are added to the resulting file.
 //!
 //! The transformation is performed in separate phases for the implementation
-//! generic header and instance-node/tuple associated types, which are unified by
+//! generic header and instance-node associated types, which are unified by
 //! [`ImplInst`]. A documentation-only `cfg(not(feature = "inst"))` implementation 
 //! is retained for the final terminal instance implementation so rustdoc 
 //! can represent the implementation without exposing generated instance-related generics.
@@ -50,23 +46,23 @@ use std::{collections::HashSet};
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::{
-    AngleBracketedGenericArguments, Attribute, Expr, ExprLit, Fields, File, GenericArgument, GenericParam, Ident, ImplItem, ImplItemConst, ImplItemType, Item, ItemEnum, ItemImpl, Lit, LitByteStr, LitInt, Meta, PathArguments, Type, Visibility::Inherited, parse_quote, parse2, punctuated::{Pair, Punctuated}, token::Comma,
+    AngleBracketedGenericArguments, Attribute, Expr, ExprLit, File, GenericArgument, GenericParam, Ident, ImplItem, ImplItemConst, ImplItemType, Item, ItemImpl, Lit, LitByteStr, LitInt, Meta, PathArguments, Type, Visibility::Inherited, parse_quote, parse2, punctuated::{Pair, Punctuated}, 
 };
 
 // --- Local Crate ---
 use crate::{
     Extraction, Inst, TraitInst, Transformation, 
     args::{
-        ComplexInstanceRange, InstModelLength, InstSpecList, InstSpecPunct, 
-        InstanceIdent, InstanceIdents, InstanceModel, NodeArgs, 
-        TerminatedInstances
+        InstModelLength, InstSpecList, InstSpecPunct, 
+        InstanceModel, NodeArgs, 
+        
     }, 
-    errors::{ImplBug, ImplError, ImplSpace, ParseBug, ProcParseErr}, 
+    errors::{ImplBug, ImplError, ParseBug, ProcParseErr}, 
     traits::cfg_feature_disclaimer,
 };
 
 // --- Proc Suite ---
-use proc_suite::{DuplicateCheck, IdentList, IntList, SupportCrate, misc::*};
+use proc_suite::{IntList, SupportCrate, misc::*};
 
 // ===============================================================================
 // ````````````````````````````` IMPL INST ENTRY-POINT ```````````````````````````
@@ -80,9 +76,8 @@ use proc_suite::{DuplicateCheck, IdentList, IntList, SupportCrate, misc::*};
 /// specifications are lowered into const generic instance counters, generated
 /// instance identifier constants, and the `InstanceCounter` associated type.
 ///
-/// Instance-node and tuple associated types are also transformed into their generated
-/// publisher or subscriber representations along with additional instance 
-/// implementations for tuple-nodes.
+/// Instance-node associated types are also transformed into their generated
+/// publisher or subscriber representations.
 ///
 /// Before transformation:
 ///
@@ -91,9 +86,6 @@ use proc_suite::{DuplicateCheck, IdentList, IntList, SupportCrate, misc::*};
 /// impl Hasher for MyHasher {
 ///     #[node(...)]
 ///     type Hash = ...;
-/// 
-///     #[tuple(...)]
-///     type Tuple = ...;
 /// }
 /// ```
 ///
@@ -112,13 +104,7 @@ use proc_suite::{DuplicateCheck, IdentList, IntList, SupportCrate, misc::*};
 ///     #[instance_pub(...)] // or #[instance_sub]
 ///     type Hash = ...;
 /// 
-///     #[instance_pub(...)] // or #[instance_sub]
-///     type Tuple = TupleEnum
 /// }
-/// 
-/// enum TupleEnum { .. }
-/// 
-/// impl InstTuple for TupleEnum { .. }
 /// ```
 ///
 /// The trait implementation's instance specifications determine the concrete
@@ -126,7 +112,7 @@ use proc_suite::{DuplicateCheck, IdentList, IntList, SupportCrate, misc::*};
 /// identifier constants preserve the instance names for delegated macro
 /// expansion.
 ///
-/// Instance-node and tuple associated types are transformed separately from the
+/// Instance-node associated types are transformed separately from the
 /// implementation generic arguments, but both phases are unified by the same
 /// [`ImplInst`] macro pipeline.
 ///
@@ -222,10 +208,8 @@ impl Transformation<File, TokenStream> for ImplInst {
 /// a terminal instance. For a non-instance implementation, the documentation
 /// implementation is instead generated for its associated nodes.
 ///
-/// During the transformation, internal #[node(...)], #[sum(...)], and
-/// #[tuple(...)] annotations are removed from associated types. For an
-/// associated type with a #[tuple(...)] annotation, the tuple type is
-/// replaced with its first tuple element.
+/// During the transformation, internal #[node(...)], #[sum(...)],  
+/// annotations are removed from associated types.
 ///
 /// The resulting implementation therefore exposes the user-facing
 /// documentation representation without the internal instance transformation
@@ -256,16 +240,6 @@ impl Transformation<File, Option<InstSpecList>> for ImplInstDoc {
             };
             ty.attrs.retain(|attr| !attr.path().is_ident(&Inst::node()));
             ty.attrs.retain(|attr| !attr.path().is_ident(&Inst::sum()));
-
-            if !ty.attrs.iter().any(|attr| attr.path().is_ident(&Inst::tuple())) {
-                continue;
-            };
-
-            ty.attrs.retain(|attr| !attr.path().is_ident(&Inst::tuple()));
-
-            if let Type::Tuple(tup) = &ty.ty {
-                ty.ty = tup.elems[0].clone();
-            };
         }
 
         let push_attr;
@@ -824,24 +798,23 @@ impl Transformation<ItemImpl, InstSpecList> for ImplInstGenericsHeader {
 /// Transforms instance-associated types declared on an instance trait
 /// implementation.
 ///
-/// An associated type may declare either `#[node(...)]` or `#[tuple]`, but
-/// never both. These annotations are only valid on associated types; applying
-/// either annotation to an associated constant or function is rejected.
+/// An associated type may declare `#[node(...)]` annotations which are only valid 
+/// on associated types; applying annotation to an associated constant or 
+/// function is rejected.
 ///
 /// The transformation first determines whether the implementation contains an
-/// instance node or tuple declaration. When no such declaration is present,
+/// instance node declaration. When no such declaration is present,
 /// the transformation requires an instance trait context; otherwise the
 /// implementation must contain at least one instance declaration.
 ///
 /// After validating the instance declaration form, the transformation
-/// delegates node-associated types to [`ItemTypeNodeInst`] and tuple-associated
-/// types to [`ItemTypeTupleInst`]. Each specialized transformation is
-/// responsible for lowering its corresponding representation and generating
-/// the required instance metadata.
+/// delegates node-associated types to [`ItemTypeNodeInst`]. Each specialized 
+/// transformation is responsible for lowering its corresponding representation 
+/// and generating the required instance metadata (in future).
 ///
 /// The same delegated transformations are validated after transformation to
-/// ensure that the resulting implementation conforms to the expected node and
-/// tuple representations.
+/// ensure that the resulting implementation conforms to the expected node
+/// representations.
 #[derive(Debug, Clone)]
 struct ItemTypeInst;
 
@@ -852,8 +825,6 @@ impl<'a> Transformation<AddonSpace<'a>, Option<InstSpecList>> for ItemTypeInst {
         let impl_ = &mut transform.1;
 
         let node = Inst::node();
-        let tuple = Inst::tuple();
-
         let mut found = false;
 
         for item in &impl_.items {
@@ -865,13 +836,6 @@ impl<'a> Transformation<AddonSpace<'a>, Option<InstSpecList>> for ItemTypeInst {
                             ImplError::NodeOnlyInTypeAssoc { attr: attr.clone() }.into()
                         );
                     }
-
-                    if let Some(attr) = c.attrs.iter().find(|attr| attr.path().is_ident(&tuple))
-                    {
-                        return Err(
-                            ImplError::TupleOnlyInTypeAssoc { attr: attr.clone() }.into()
-                        );
-                    }
                 }
                 ImplItem::Fn(f) => {
                     if let Some(attr) = f.attrs.iter().find(|attr| attr.path().is_ident(&node))
@@ -880,22 +844,10 @@ impl<'a> Transformation<AddonSpace<'a>, Option<InstSpecList>> for ItemTypeInst {
                             ImplError::NodeOnlyInTypeAssoc { attr: attr.clone() }.into()
                         );
                     }
-                    if let Some(attr) = f.attrs.iter().find(|attr| attr.path().is_ident(&tuple))
-                    {
-                        return Err(
-                            ImplError::TupleOnlyInTypeAssoc { attr: attr.clone() }.into()
-                        );
-                    }
                 }
                 ImplItem::Type(t) => {
                     let node = t.attrs.iter().find(|attr| attr.path().is_ident(&node));
-                    let tuple = t.attrs.iter().find(|attr| attr.path().is_ident(&tuple));
-
-                    if node.is_some() && tuple.is_some() {
-                        return Err(ImplError::EitherTupleOrNode { attr: tuple.unwrap().clone() } .into())
-                    }
-
-                    if node.is_some() || tuple.is_some() {
+                    if node.is_some() {
                         found = true;
                     }
                 }
@@ -903,17 +855,15 @@ impl<'a> Transformation<AddonSpace<'a>, Option<InstSpecList>> for ItemTypeInst {
             }
         }
         if !found && context.is_none() {
-            return Err(ImplError::InstEitherTraitOrNodeOrTuple {}.into());
+            return Ok(());
         }
 
         ItemTypeNodeInst::checked_transform(&ItemTypeNodeInst, &mut transform.1, &())?;
-        ItemTypeTupleInst::checked_transform(&ItemTypeTupleInst, transform, &())?;
         Ok(())
     }
 
     fn validate_transform(&self, transform: &AddonSpace<'a>, _: Option<&Option<InstSpecList>>) -> Result<(), proc_macro2::TokenStream> {
         ItemTypeNodeInst::validate_transform(&ItemTypeNodeInst, &transform.1, None)?;
-        ItemTypeTupleInst::validate_transform(&ItemTypeTupleInst, transform,None)?;
         Ok(())
     }
 }
@@ -1209,474 +1159,3 @@ impl Transformation<ItemImpl> for ItemTypeNodeInst {
         Ok(())
     }
 }
-
-// ===============================================================================
-// ```````````````````````````` INST ASSOC TYPE TUPLE ````````````````````````````
-// ===============================================================================
-
-/// Transforms tuple-associated types declared on an instance trait
-/// implementation into instance tuple representations.
-///
-/// Each `#[tuple]` attribute identifies an associated type whose tuple members
-/// represent the available instance variants. The tuple members are collected
-/// and lowered into a generated enum, with one variant for each tuple member.
-/// Each generated enum variant is associated with its corresponding instance
-/// index through an `InstTuple` implementation.
-///
-/// `#[tuple]` is only valid on associated types. The associated type must
-/// contain a non-empty tuple of unqualified path types. Qualified paths,
-/// generic arguments, and non-path tuple elements are not supported.
-///
-/// Before transformation:
-///
-/// ```ignore
-/// impl Config for Test {
-///     #[tuple]
-///     type Take = (Sha256, Sha512, Sha768);
-/// }
-/// ```
-///
-/// After transformation, the associated type refers to a generated enum:
-///
-/// ```ignore
-/// #[instance_node_explicit_target]
-/// impl Config for Test {
-///     #[instance_pub(...)]
-///     type Take = __ItemTypeTupleInstSha256Sha512Sha768;
-/// }
-/// ```
-///
-/// The generated enum contains one tuple variant for each instance type:
-///
-/// ```ignore
-/// pub enum __ItemTypeTupleInstSha256Sha512Sha768 {
-///     Sha256(Sha256),
-///     Sha512(Sha512),
-///     Sha768(Sha768),
-/// }
-/// #[inst(Sha256[0])] 
-/// impl InstTuple for Sha256 { type Variant = Sha256 }
-/// 
-/// #[inst(Sha512[1])] 
-/// impl InstTuple for Sha512 { type Variant = Sha512 }
-/// 
-/// #[inst(Sha768[2];)] // terminal index has semicolon 
-/// impl InstTuple for Sha768 { type Variant = Sha768 }
-/// ```
-///
-/// An `InstTuple` implementation is generated for each variant, associating
-/// the variant with its instance index. The generated enum and its
-/// implementations are gated behind the `inst` feature.
-///
-/// The transformation also marks the resulting associated type as an instance
-/// publisher and registers the containing implementation with the instance
-/// node transformation phase.
-#[derive(Debug, Clone)]
-struct ItemTypeTupleInst;
-
-impl<'a> Transformation<AddonSpace<'a>> for ItemTypeTupleInst {
-    fn raw_transform(
-        &self,
-        transform: &mut AddonSpace<'a>,
-        _: &(),
-    ) -> Result<(), proc_macro2::TokenStream> {
-        let (file, transform) = transform;
-
-        let mut ty_items = Vec::new();
-        let tuple = Inst::tuple();
-        for item in &mut transform.items {
-            match item {
-                ImplItem::Const(c) => {
-                    if let Some(attr) = c.attrs.iter().find(|attr| attr.path().is_ident(&tuple)) {
-                        return Err(ImplError::TupleOnlyInTypeAssoc { attr: attr.clone() }.into());
-                    }
-                }
-                ImplItem::Fn(f) => {
-                    if let Some(attr) = f.attrs.iter().find(|attr| attr.path().is_ident(&tuple)) {
-                        return Err(ImplError::TupleOnlyInTypeAssoc { attr: attr.clone() }.into());
-                    }
-                }
-                ImplItem::Type(t) => {
-                    if t.attrs.iter().any(|attr| attr.path().is_ident(&tuple)) {
-                        ty_items.push(t);
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        if ty_items.is_empty() {
-            return Ok(())
-        }
-
-        let support_crate = Inst::support_crate();
-
-        for ty in ty_items {
-
-            if let Some(where_clause) = &ty.generics.where_clause {
-                return Err(ImplError::WhereClauseNotSupportInTuple { where_: where_clause.clone() }.into());
-            }
-
-            let mut tuple_attr = None;
-            let mut build = Vec::new();
-            for attr in &ty.attrs {
-                if !attr.path().is_ident(&tuple) {
-                    build.push(attr.clone());
-                    continue;
-                }
-                if tuple_attr.is_some() {
-                    return Err(ImplError::DoubleTuple { attr: attr.clone() }.into());
-                };
-                tuple_attr = Some(attr.clone());
-            }
-            ty.attrs = build;
-            let Some(tuple_attr) = tuple_attr else {
-                return Err(ImplBug::InconsistencyFindingTupleAttribute {}.into());
-            };
-
-            match &tuple_attr.meta {
-                syn::Meta::Path(_) => {}
-                _ => {
-                    return Err(ImplError::TupleArgsAreInfered { attr: tuple_attr.clone() } .into());
-                }
-            };
-
-            // Indexes are placeholder, for impl nodes in instances-macro their length is only taken
-            let mut indexes = IntList::default();
-            indexes.ints.push(parse_quote!(0));
-
-            let attrs = &mut ty.attrs;
-
-            if let Type::Path(path) = &ty.ty {
-                if let Some(qself) = &path.qself {
-                    if qself.as_token.is_none() {
-                        return Err(ImplError::TupleSubAssocQualifiedButNotTrait {
-                            qself: *qself.ty.clone(),
-                        }
-                        .into());
-                    }
-                } else {
-                    return Err(ImplError::ExpectedTupleTypeImpl { ty: ty.ty.clone() }.into())
-                }
-
-                let sub_target = Inst::subscriber();
-                attrs.insert(0, parse_quote!(#[#sub_target]));
-
-                continue;
-            }
-
-            let Type::Tuple(tuple_ty ) = &ty.ty else {
-                return Err(ImplError::ExpectedTupleTypeImpl { ty: ty.ty.clone() }.into())
-            };
-
-            if tuple_ty.elems.is_empty() {
-                return Err(ImplError::ExpectedTupleTypeImpl { ty: ty.ty.clone() }.into())
-            }
-
-            let mut collect_tuples = IdentList::default();
-            for ty in &tuple_ty.elems {
-                let Type::Path(path) = ty else {
-                    return Err(ImplError::TupleArgMustBeStruct {ty: ty.clone()}.into());
-                };
-
-                if let Some(qself) = &path.qself {
-                    return Err(ImplError::TupleArgMustNotBeQualified {qself: *qself.ty.clone()}.into());
-                }
-
-                let len = path.path.segments.len();
-                if len > 1 {
-                    return Err(ImplError::TupleArgPathQualifyElsewhere {seg: path.path.segments[len -2].clone()}.into());
-                }
-
-                let seg = path.path.segments.last().unwrap();
-
-                if !matches!(&seg.arguments, PathArguments::None) {
-                    return Err(ImplError::TupleArgGenericArgsNotSupported {path_args: seg.arguments.clone()}.into());
-                }
-
-                collect_tuples.idents.push(seg.ident.clone())
-            }
-
-            collect_tuples.duplicate_check(Some(ImplSpace::IdentDuplicateFound{}.into()))?;
-
-            let mut tuples_iter = collect_tuples.idents.iter();
-            let mut span = tuples_iter.next().unwrap().span();
-            for ident in tuples_iter {
-                span = span.join(ident.span()).unwrap_or(span);
-            };
-
-            let mut collect: Punctuated<InstanceIdents, Comma> = Punctuated::new();
-            for ident in &collect_tuples.idents {
-                let mut inner: Punctuated<InstanceIdent, Comma> = Punctuated::new();
-                inner.push(InstanceIdent::Compile(ident.clone()));
-                let idents = InstanceIdents { span: ident.span(), paren_token: Default::default(), params: inner };
-                collect.push(idents);
-            }
-            let inst = InstanceModel::Complex(ComplexInstanceRange::Terminated(TerminatedInstances { span, bracket_token: Default::default(), params: collect }));
-            let args = NodeArgs::checked_extract(&inst.into(), &indexes)?;
-
-            let bytes = collect_tuples.idents
-                .iter()
-                .flat_map(|ident| ident.to_string().into_bytes())
-                .collect::<Vec<u8>>();
-            let bytes = &bytes;
-
-            let enum_ident = gen_type_ident_with_suffix::<Self>(Some(bytes));
-
-            let mut enum_: ItemEnum = parse_quote!(pub enum #enum_ident {});
-            enum_.attrs.push(Inst::feature());
-            enum_.attrs.push(parse_quote!(#[allow(non_camel_case_types)]));
-
-            let tuple_len = collect_tuples.idents.len();
-
-            for (i, ident) in collect_tuples.idents.iter().enumerate() {
-                enum_.variants.push(parse_quote!(#ident(#ident)));
-
-                let mut impl_: ItemImpl = parse_quote!(
-                    impl #support_crate::InstTuple for #enum_ident {
-                        type Variant = #ident;
-                    }
-                );
-                let index = i.to_string();
-                let index_lit = LitInt::new(&index, ident.span());
-                if i < tuple_len - 1 {
-                    impl_.attrs.push(parse_quote!(#[#support_crate::inst(#ident[#index_lit])]));
-                } else {
-                    impl_.attrs.push(parse_quote!(#[#support_crate::inst(#ident[#index_lit];)]));
-                }
-                impl_.attrs.push(parse_quote!(#[allow(non_camel_case_types)]));
-                impl_.attrs.insert(0, Inst::feature());
-
-                file.items.push(Item::Impl(impl_));
-            }
-            file.items.push(Item::Enum(enum_));
-
-            let pub_target = Inst::publisher();
-            ty.attrs.insert(0, parse_quote!(#[#pub_target(#args)]));
-
-            ty.ty = parse_quote!(#enum_ident);
-        }
-
-        let attrs = &mut transform.attrs;
-        let support_crate = Inst::support_crate();
-        let node_target = Inst::node_target();
-
-        attrs.insert(
-            0,
-            parse_quote!(#[#support_crate::#node_target]),
-        );
-        Inst::delegate_attribute(attrs);
-
-        Ok(())
-    }
-
-    fn validate_transform(
-        &self,
-        transform: &AddonSpace<'a>,
-        _: Option<&()>,
-    ) -> Result<(), proc_macro2::TokenStream> {
-        let (file, transform) = transform;
-        ItemTypeNodeInst::validate_transform(&ItemTypeNodeInst, transform, None)?;
-
-        let items = file.items.iter().filter_map(|item| {
-            let Item::Enum(en) = item else {
-                return None;
-            };
-            Some(en)
-        });
-
-        if items.clone().next().is_none() {
-            return Ok(())
-        }
-
-        let has_attrs = |attrs: &Vec<Attribute>| -> Result<(), TokenStream> {
-            if !attrs.iter().any(|attr| {
-                match &attr.meta {
-                    Meta::List(list) => {
-                        if !list.path.is_ident("cfg") {
-                            return false
-                        }
-
-                        list.tokens.to_string() == quote!(feature = "inst").to_string()
-                    }
-                    _ => false,
-                }
-            }) {
-                return Err(ImplBug::ImplTupleAddonNotInstFeatureGated {}.into())
-            }
-
-            if !attrs.iter().any(|attr| {
-                match &attr.meta {
-                    Meta::List(list) => {
-                        if !list.path.is_ident("allow") {
-                            return false
-                        }
-
-                        list.tokens.to_string() == quote!(non_camel_case_types).to_string()
-                    }
-                    _ => false,
-                }
-            }) {
-                return Err(ImplBug::ImplTupleAddonNonCamelCaseAttrMissing {}.into())
-            }
-
-            Ok(())
-        };
-
-        for en in items {
-            has_attrs(&en.attrs)?;
-
-            let enum_ident = &en.ident;
-            let variants_len = en.variants.len();
-            let variants = &en.variants;
-
-            let impl_items = file.items.iter().filter_map(|item| {
-                let Item::Impl(impl_) = item else {
-                    return None
-                };
-
-                if *impl_.self_ty == parse_quote!(#enum_ident) {
-                    return Some(impl_)
-                };
-
-                return None
-            });
-
-            if impl_items.clone().count() != variants_len {
-                return Err(ImplBug::TupleEnumAddonInstImplsInconsistent {}.into())
-            }
-
-            let support_crate = Inst::support_crate();
-
-            let mut collected_variants = Vec::new();
-            for impl_ in impl_items {
-
-                if impl_.items.len() > 1 {
-                    return Err(ImplBug::TupleEnumAddonInstImplItemsExtraFound {}.into())
-                }
-
-                has_attrs(&impl_.attrs)?;
-
-                let Some(tokens) = impl_.attrs.iter().find_map(|attr| {
-                    match &attr.meta {
-                        Meta::List(list) => {
-                            if list.path != parse_quote!(#support_crate::inst){
-                                return None
-                            }
-                            Some(&list.tokens)
-                        }
-                        _ => None,
-                    }
-                }) else {
-                    return Err(ImplBug::ImplTupleAddonInstImplNotInstAttributed {}.into())
-                };
-
-                let args = InstSpecList::checked_extract(tokens, &())?;
-
-                if args.idents.len() != 1 {
-                    return Err(ImplBug::ImplTupleAddonInstImplInstArgInconsistent {}.into())
-                }
-
-                let pair = args.idents.pairs().next().unwrap();
-                let arg_ident = pair.value().ident.clone();
-                let arg_punc = pair.punct().cloned().cloned();
-
-                let arg_index = parse_pos_usize(&args.idents[0].index)?;
-
-                let Some((_, trait_path, _)) = &impl_.trait_ else {
-                    return Err(ImplBug::ImplTupleAddonInstImplNotTraitImpl {}.into())
-                };
-
-                if *trait_path != parse_quote!(#support_crate::InstTuple) {
-                    return Err(ImplBug::ImplTupleAddonInstTraitImplInvalidTrait {}.into())
-                }
-
-                let ImplItem::Type(ty) = &impl_.items[0] else {
-                    return Err(ImplBug::TupleEnumAddonInstImplItemNotType {}.into())
-                };
-
-                if ty.ty != parse_quote!(#arg_ident) {
-                    return Err(ImplBug::TupleEnumAddonInstImplItemTypeInvalid {}.into())
-                }
-
-                if ty.ident != format_ident!("Variant") {
-                    return Err(ImplBug::TupleEnumAddonInstImplItemIdentInvalid {}.into())
-                }
-
-                collected_variants.push((arg_ident, arg_index, arg_punc));
-            }
-
-            collected_variants.sort_by_key(|(_, index, _)| *index);
-
-
-            for ((i, variant), (ident, index, punct)) in variants.iter().enumerate().zip(collected_variants) {
-
-                if i != index {
-                    return Err(ImplBug::TupleEnumAddonVariantIndexInvalid {}.into())
-                }
-
-                if i == variants_len - 1 {
-                    let Some(InstSpecPunct::SemiColon(_)) = punct else {
-                        return Err(ImplBug::TupleEnumAddonVariantLastInstPunctNotTerminated {}.into())
-                    };
-                } else {
-                    if let Some(InstSpecPunct::SemiColon(_)) = punct {
-                        return Err(ImplBug::TupleEnumAddonVariantInstPunctInvalid {}.into())
-                    }
-                }
-
-                let variant_ident = &variant.ident;
-
-                if *variant_ident != ident {
-                    return Err(ImplBug::TupleEnumAddonVariantIdentInvalid {}.into())
-                }
-
-                let Fields::Unnamed(unamed) = &variant.fields else {
-                    return Err(ImplBug::TupleEnumAddonVariantFieldsNotUnamed {}.into())
-                };
-
-                if unamed.unnamed.len() != 1 {
-                    return Err(ImplBug::TupleEnumAddonVariantFieldInconsistent {}.into())
-                }
-
-                let field_ty = &unamed.unnamed[0].ty;
-
-                if *field_ty != parse_quote!(#ident) {
-                    return Err(ImplBug::TupleEnumAddonVariantTypeInvalid {}.into())
-                }
-            }
-
-            let Some(impl_ty) = transform.items.iter().find_map(|item| {
-                let ImplItem::Type(ty) = item else {
-                    return None
-                };
-
-                if ty.ty == parse_quote!(#enum_ident) {
-                    return Some(ty)
-                }
-
-                None
-            }) else {
-                    return Err(ImplBug::TupleEnumInstNodeTypeNotFound {}.into())
-            };
-
-            let Some(_) = impl_ty.attrs.iter().find_map(|attr| {
-                match &attr.meta {
-                    Meta::List(list) => {
-                        if !list.path.is_ident(&Inst::publisher()) {
-                            return None
-                        }
-                        Some(&list.tokens)
-                    }
-                    _ => None,
-                }
-            }) else {
-                return Err(ImplBug::TupleEnumInstNodeTypePubNodeAttrsNotFound {}.into())
-            };
-
-        }
-
-        Ok(())
-    }
-}
-

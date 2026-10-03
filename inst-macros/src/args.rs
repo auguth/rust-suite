@@ -30,7 +30,7 @@ use proc_suite::{BStringList, DuplicateCheck, ErrorInfo, IdentList, IntList, Par
 use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, format_ident, quote};
 use syn::{
-    Attribute, Block, Expr, ExprPath, Ident, Item, ItemImpl, ItemMod, ItemTrait, LitInt, Stmt, Token, Visibility, braced, bracketed, parenthesized, parse::{Parse, ParseStream, discouraged::Speculative}, parse_quote, punctuated::Punctuated, token::{self, Comma, PathSep},
+    Attribute, Block, Expr, ExprPath, Ident, Item, ItemImpl, ItemMod, ItemTrait, LitInt, Stmt, Token, braced, bracketed, parenthesized, parse::{Parse, ParseStream, discouraged::Speculative}, parse_quote, punctuated::Punctuated, token::{self, Comma, PathSep},
 };
 
 // --- Local Crate ---
@@ -63,10 +63,6 @@ impl Inst {
 
     pub(crate) fn node() -> Ident {
         format_ident!("node")
-    }
-
-    pub(crate) fn tuple() -> Ident {
-        format_ident!("tuple")
     }
 
     pub(crate) fn sum() -> Ident {
@@ -2037,134 +2033,6 @@ impl Extraction<proc_macro2::TokenStream> for InstGetArgs {
         _: &(),
     ) -> Result<Self, proc_macro2::TokenStream> {
         syn::parse2::<Self>(from.clone()).map_err(|e| e.to_compile_error())
-    }
-
-    fn validate_extract(
-        &self,
-        _: &proc_macro2::TokenStream,
-        _: Option<&()>,
-    ) -> Result<(), proc_macro2::TokenStream> {
-        Ok(())
-    }
-}
-
-// ===============================================================================
-// ````````````````````````````` INSTANCE TUPLE ARGS `````````````````````````````
-// ===============================================================================
-
-/// Arguments for declaring a tuple of instance identifiers.
-///
-/// Each entry consists of an optional visibility followed by the identifier
-/// representing the instance position.
-///
-/// ```ignore
-/// pub Foo, Bar, pub(crate) Baz
-/// ```
-#[derive(Debug, Clone)]
-pub(crate) struct InstTupleArgs {
-    pub(crate) span: Span,
-
-    /// The instance tuple entries.
-    pub(crate) list: Punctuated<InstTuple, Comma>,
-}
-
-impl InstTupleArgs {
-    /// List all the tuple idents into a vector for documentation purposes
-    pub fn list(&self) -> Vec<Ident> {
-        self.list.iter().map(|tup| tup.ident.clone()).collect()
-    }
-}
-
-/// A single instance tuple entry.
-///
-/// The optional visibility controls the visibility of the generated instance
-/// item, while the identifier names the instance position.
-///
-/// ```ignore
-/// pub Foo
-/// Bar
-/// pub(crate) Baz
-/// ```
-#[derive(Debug, Clone)]
-pub(crate) struct InstTuple {
-    pub(crate) span: Span,
-
-    /// Visibility of the generated instance item.
-    pub(crate) visibility: Visibility,
-
-    /// Identifier naming the instance position.
-    pub(crate) ident: Ident,
-}
-
-impl Parse for InstTupleArgs {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let span = input.span();
-
-        let list = Punctuated::<InstTuple, Comma>::parse_terminated(input)?;
-
-        let span = span.join(input.span()).unwrap_or(span);
-
-        Ok(Self { span, list })
-    }
-}
-
-impl SpanOf for InstTupleArgs {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl Parse for InstTuple {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let span = input.span();
-
-        let visibility = input.parse::<Visibility>()?;
-        let ident = input.parse::<Ident>()?;
-
-        let span = span.join(ident.span()).unwrap_or(span);
-
-        Ok(Self {
-            span,
-            visibility,
-            ident,
-        })
-    }
-}
-
-impl SpanOf for InstTuple {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl Into<InstanceModel> for InstTupleArgs {
-    fn into(self) -> InstanceModel {
-        let mut collect: Punctuated<InstanceIdents, Comma> = Punctuated::new();
-        for item in &self.list {
-            let mut inner: Punctuated<InstanceIdent, Comma> = Punctuated::new();
-            inner.push(InstanceIdent::Compile(item.ident.clone()));
-            let idents = InstanceIdents { span: item.span(), paren_token: Default::default(), params: inner };
-            collect.push(idents);
-        }
-        InstanceModel::Complex(ComplexInstanceRange::Terminated(TerminatedInstances { span: self.span(), bracket_token: Default::default(), params: collect }))
-    }
-}
-
-
-
-impl Extraction<proc_macro2::TokenStream> for InstTupleArgs {
-    fn raw_extract(
-        from: &proc_macro2::TokenStream,
-        _: &(),
-    ) -> Result<Self, proc_macro2::TokenStream> {
-        let tuples = syn::parse2::<Self>(from.clone()).map_err(|e| e.to_compile_error())?;
-        let mut idents = IdentList::default();
-        for tuple in &tuples.list {
-            let ident = tuple.ident.clone();
-            idents.idents.push(ident);
-        }
-        idents.duplicate_check(Some(TraitSpace::DuplicateIdent {}.into()))?;
-        Ok(tuples)
     }
 
     fn validate_extract(

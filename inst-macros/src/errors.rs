@@ -147,22 +147,14 @@ error_spaces! {
             InstanceCounterGenericInvalidType,
             NodeRequiresArgs,
             NodeRequiresArgsNotValue,
-            TupleRequiresArgs,
-            TupleRequiresArgsNotValue,
-            EitherTupleOrNode,
-            WhereClauseNotSupportInTuple,
             SumNoArgs,
             SumNotAllowed,
             DoubleNode,
-            DoubleTuple,
             InconsistencyFindingNodeAttribute,
-            InconsistencyFindingTupleAttribute,
             TraitDocsNotFound,
             DocTargetInstTraitSumAttrExists,
             DocTargetInstTraitNodeAttrExists,
-            DocTargetInstTraitTupleAttrExists,
             NodeOnlyInTypeAssoc,
-            TupleOnlyInTypeAssoc,
             DuplicateInstanceTraitBound,
             ExpectedInstTraitNodeBound,
             ParenthesizedInstTraitNodeBound,
@@ -171,49 +163,6 @@ error_spaces! {
             TransformedFileDoesNotHaveNotDocTarget,
             NotDocTargetDoesNotHaveDocs,
             DocTargetDoesNotHaveDocs,
-            InstEitherTraitOrNodeOrTuple,
-            TraitTupleTargetItemNonCamelCaseAttrMissing,
-            TraitTupleTargetItemTypeAliasBoundsAttrMissing,
-            TraitTupleTargetItemUnusedAttrMissing,
-            TraitTupleExpectedAddonNotImplNorTypeAlias,
-            TraitTupleExpectedAddonAccessImplNotFeatureGated,
-            TraitTupleExpectedAddonAccessImplArgsNotFound,
-            TraitTupleAddonAccessImplSelfNotTypePath,
-            TraitTupleAddonAccessImplSelfNotAssoc,
-            TraitTupleAddonAccessImplSelfAssocQSelfInvalid,
-            TraitTupleAddonAccessImplSelfAssocTraitNotFound,
-            TraitTupleAddonAccessImplSelfAssocTraitInvalid,
-            TraitTupleAddonAccessImplSelfAssocNotFound,
-            TraitTupleAddonAccessImplSelfInconsistent,
-            TraitTupleAddonAccessImplForUnknownNode,
-            TraitTupleAddonAccessImplWhereClauseMissing,
-            TraitTupleAddonAccessImplInconsistentWhereClausePreds,
-            TraitTupleAddonAccessImplNotTypePred,
-            TraitTupleAddonAccessImplTypePredNotSelf,
-            TraitTupleAddonAccessImplSelfPredBoundsInconsistent,
-            TraitTupleAddonAccessImplInvalidSelfInstBound,
-            TraitTupleAddonAccessImplGenericParamsLenInvalid,
-            TraitTupleAddonAccessImplHolderGenericParamTypeMissing,
-            TraitTupleAddonAccessImplHolderParamWrongIdent,
-            TraitTupleAddonAccessImplHolderParamExtraBounds,
-            TraitTupleAddonAccessImplHolderParamNotTypeBound,
-            TraitTupleAddonAccessImplHolderParamBoundInvalid,
-            TraitTupleAddonAccessImplLifetimeParamHasBounds,
-            TraitTupleAddonAccessImplLifetimeIdentInvalid,
-            TraitTupleAddonAccessImplTypeParamHasBounds,
-            TraitTupleAddonAccessImplTypeParamIdentInvalid,
-            TraitTupleAddonAccessImplConstParamInvalidDefault,
-            TraitTupleAddonAccessImplConstParamInvalidType,
-            TraitTupleAddonAccessImplConstParamInvalidIdent,
-            TraitTupleAddonAccessImplInvalidGenericParam,
-            TraitTupleAddonAccessImplExtraItemsFound,
-            TraitTupleAddonAccessImplItemNotType,
-            TraitTupleAddonAccessImplItemInvalidType,
-            TraitTupleAddonExpectedDocTypeAliasNotFound,
-            TraitTupleExpecteDocTypeAliasNotNotFeatureGated,
-            TraitTupleExpecteDocTypeAliasInvalidType,
-            TraitTupleExpecteDocTypeAliasInvalidVisibility,
-            TraitTupleExpecteDocTypeAliasHasNoDocs,
         }
     }
 
@@ -245,7 +194,6 @@ error_spaces! {
             TraitImplAngleArgsExpected,
             SumAttrNotRemoved,
             NodeAttrNotRemoved,
-            TupleAttrNotRemoved,
             IdentDuplicateFound,
             TransformedFileInconsistent,
             TransformedFileShouldNotHaveDocTarget,
@@ -253,8 +201,6 @@ error_spaces! {
             TransformedFileDoesNotHaveNotDocTarget,
             NotDocTargetDoesNotHaveDocs,
             NodeOnlyInTypeAssoc,
-            TupleOnlyInTypeAssoc,
-            InstEitherTraitOrNodeOrTuple,
             InstanceImplCounterGenericArgMissing,
             InstanceImplCounterGenericArgNotConst,
             InstanceImplCounterGenericArgNotLit,
@@ -282,43 +228,10 @@ error_spaces! {
             ExpectedNodeTypeImplPub,
             ExpectedNodeTypeImplPubAttrList,
             ExpectedNodeTypeImplSubAttrPath,
-            EitherTupleOrNode,
-            WhereClauseNotSupportInTuple,
-            DoubleTuple,
-            InconsistencyFindingTupleAttribute,
-            ExpectedTupleTypeImpl,
-            TupleSubAssocQualifiedButNotTrait,
-            TupleArgMustBeStruct,
-            TupleArgMustNotBeQualified,
-            TupleArgPathQualifyElsewhere,
-            TupleArgGenericArgsNotSupported,
-            TupleSubAssocMustBeSelfQualified,
-            TupleArgsAreInfered,
             DocFileTooManyItemsToTransform,
             DocFileContainsNoImpl,
             DocImplExpectedToContainDocAttr,
             DocFileExpectedToBeEmpty,
-            TupleNodeNotTupleType,
-            ImplTupleAddonNotInstFeatureGated,
-            ImplTupleAddonNonCamelCaseAttrMissing,
-            TupleEnumAddonInstImplsInconsistent,
-            TupleEnumAddonInstImplItemsExtraFound,
-            ImplTupleAddonInstImplNotInstAttributed,
-            ImplTupleAddonInstImplInstArgInconsistent,
-            ImplTupleAddonInstImplNotTraitImpl,
-            ImplTupleAddonInstTraitImplInvalidTrait,
-            TupleEnumAddonInstImplItemNotType,
-            TupleEnumAddonInstImplItemTypeInvalid,
-            TupleEnumAddonInstImplItemIdentInvalid,
-            TupleEnumAddonVariantIndexInvalid,
-            TupleEnumAddonVariantIdentInvalid,
-            TupleEnumAddonVariantFieldsNotUnamed,
-            TupleEnumAddonVariantFieldInconsistent,
-            TupleEnumAddonVariantTypeInvalid,
-            TupleEnumInstNodeTypeNotFound,
-            TupleEnumInstNodeTypePubNodeAttrsNotFound,
-            TupleEnumAddonVariantLastInstPunctNotTerminated,
-            TupleEnumAddonVariantInstPunctInvalid,
         }
     }
 
@@ -341,7 +254,6 @@ error_spaces! {
             InconsistencyFindingNodeAttribute,
             NodeRequiresArgs,
             NodeRequiresArgsNotValue,
-            TupleOnlyAllowedInInstTraitImpl,
             ExpectedWhereClauseForSelf,
             ExpectedSelfInWhereClause,
             InconsistentTranformedImplTargetsLength,
@@ -741,36 +653,6 @@ diagnostics!(
                     `module::InstTrait[(Crypto, _)..(_, _)]`",
             ]
         },
-        TupleRequiresArgs {
-            fields: {
-                attr: Attribute,
-            },
-            msg: "instance tuple requires arguments `<visibility> <ident>, ...`",
-            tags: [Unsupported],
-            span: { tokens: attr },
-            note: [
-                "<visibility> is the visibility of the generated instance tuple item type",
-                "<ident> is the identifier naming the instance tuple item",
-                "each tuple item consists of an optional visibility followed by an identifier",
-                "multiple tuple items are separated by commas",
-                "examples: `Foo`, `pub Foo`, `Foo, Bar`, `pub(crate) Foo, Bar`",
-            ]
-        },
-        TupleRequiresArgsNotValue {
-            fields: {
-                meta: MetaNameValue,
-            },
-            msg: "instance tuple requires arguments `<visibility> <ident>, ...`, but found key-value",
-            tags: [Unsupported],
-            span: { tokens: meta },
-            note: [
-                "<visibility> is the visibility of the generated instance tuple item",
-                "<ident> is the identifier naming the instance tuple item",
-                "each tuple item consists of an optional visibility followed by an identifier",
-                "multiple tuple items are separated by commas",
-                "examples: `Foo`, `pub Foo`, `Foo, Bar`, `pub(crate) Foo, Bar`",
-            ]
-        },
         Max4Params {
             fields: {
                 idents: IdentList,
@@ -818,17 +700,6 @@ diagnostics!(
                 "found multiple node annotations, keep only one",
             ],
         },
-        DoubleTuple {
-            fields: {
-                attr: Attribute,
-            },
-            msg: "only one instance tuple attribute annotation is allowed",
-            tags: [Unsupported],
-            span: { tokens: attr },
-            help: [
-                "found multiple tuple annotations, keep only one",
-            ],
-        },
         NodeOnlyInTypeAssoc {
             fields: {
                 attr: Attribute,
@@ -838,34 +709,6 @@ diagnostics!(
             span: { tokens: attr },
             help: [
                 "use instance node declaration only in associated types",
-            ],
-        },
-        TupleOnlyInTypeAssoc {
-            fields: {
-                attr: Attribute,
-            },
-            msg: "instance tuple attribute annotation only given via a associated type, found else",
-            tags: [Unsupported],
-            span: { tokens: attr },
-            help: [
-                "use instance tuple declaration only in associated types",
-            ],
-        },
-        InstEitherTraitOrNodeOrTuple {
-            fields: {
-            },
-            msg: "inst attribute is provided either for declaring trait instance or associated types as instance node or instance tuple",
-            tags: [Unsupported],
-            span: { span: &Span::call_site() },
-            help: [
-                "use #[inst] to declare this as instance trait or declare associated types as instance node or tuple, found none",
-                "can remove this attribute to avoid ambiguity if none-such requirement exists",
-            ],
-            note: [
-                "either declare idents as params to declare an instance trait `#[inst(<params>)]`",
-                "where <params> are comma seperated ident list",
-                "or declare a instance node via `#[node(..)]` in an associated type with bound to an instance trait",
-                "or declare a instance tuple via `#[tuple(..)]` in an associated type",
             ],
         },
         DuplicateInstanceTraitBound {
@@ -901,29 +744,6 @@ diagnostics!(
             note: [
                 "instance traits can only have angle bracketed generic arguments",
             ],
-        },
-        EitherTupleOrNode {
-            fields: {
-                attr: Attribute,
-            },
-            msg: "either provide instance tuple or instance node attribute annotation, found both",
-            tags: [Unsupported],
-            span: { tokens: attr },
-            note: [
-                "keep any one annotation, in case of lower level control use instance node",
-            ],
-        },
-        WhereClauseNotSupportInTuple {
-            fields: {
-                where_: WhereClause,
-            },
-            msg: "where clauses are not yet supported in instance tuple assoc types",
-            tags: [Unsupported],
-            span: { tokens: where_ },
-            help : [
-                "remove the where clause"
-            ],
-
         },
     }
 );
@@ -967,24 +787,16 @@ bug_diagnostics! {
             "inst node requires arguments",
         NodeRequiresArgsNotValue =>
             "inst node arguments must not resolve to a key value",
-        TupleRequiresArgs =>
-            "inst tuple requires arguments",
-        TupleRequiresArgsNotValue =>
-            "inst tuple arguments must not resolve to a key value",
         SumNoArgs =>
             "sum does not require argument",
         InconsistencyFindingNodeAttribute =>
             "inconsistency finding instance node attribute annotation in trait",
-        InconsistencyFindingTupleAttribute =>
-            "inconsistency finding instance tuple attribute annotation in trait",
         TraitDocsNotFound =>
             "inst trait disclaimer docs are not appended",
         DocTargetInstTraitSumAttrExists =>
             "a doc-target-inst trait contains a sum type annotation",
         DocTargetInstTraitNodeAttrExists =>
             "a doc-target-inst trait contains a node type annotation",
-        DocTargetInstTraitTupleAttrExists =>
-            "a doc-target-inst trait contains a tuple type annotation",
         NodeOnlyInTypeAssoc =>
             "a non-assoc-type contains inst-node annotation",
         TransformedFileDoesNotHaveDocTarget =>
@@ -995,93 +807,6 @@ bug_diagnostics! {
             "not-doc trait target does not contain the required documentation disclaimer",
         DocTargetDoesNotHaveDocs =>
             "doc trait target does not contain the required instance documentation",
-        EitherTupleOrNode =>
-            "allowed both tuple and node instance in a single assoc type",
-
-        TraitTupleTargetItemNonCamelCaseAttrMissing =>
-            "a tuple target item is missing the required non-camel-case-types allow attribute",
-        TraitTupleTargetItemTypeAliasBoundsAttrMissing =>
-            "a tuple target item is missing the required type-alias-bounds allow attribute",
-        TraitTupleTargetItemUnusedAttrMissing =>
-            "a tuple target item is missing the required unused allow attribute",
-        TraitTupleExpectedAddonNotImplNorTypeAlias =>
-            "an expected tuple addon is neither an impl nor a type alias",
-        TraitTupleExpectedAddonAccessImplNotFeatureGated =>
-            "an expected tuple addon access impl is not feature gated",
-        TraitTupleExpectedAddonAccessImplArgsNotFound =>
-            "an expected tuple addon access impl does not contain the required access arguments",
-        TraitTupleAddonAccessImplSelfNotTypePath =>
-            "a tuple addon access impl self type is not a type path",
-        TraitTupleAddonAccessImplSelfNotAssoc =>
-            "a tuple addon access impl self type is not an associated type",
-        TraitTupleAddonAccessImplSelfAssocQSelfInvalid =>
-            "a tuple addon access impl self associated type has an invalid qualified self type",
-        TraitTupleAddonAccessImplSelfAssocTraitNotFound =>
-            "a tuple addon access impl self associated type does not contain the expected trait",
-        TraitTupleAddonAccessImplSelfAssocTraitInvalid =>
-            "a tuple addon access impl self associated type contains an invalid trait",
-        TraitTupleAddonAccessImplSelfAssocNotFound =>
-            "a tuple addon access impl self associated type does not contain the expected associated type",
-        TraitTupleAddonAccessImplSelfInconsistent =>
-            "a tuple addon access impl self associated type path contains inconsistent path segments",
-        TraitTupleAddonAccessImplForUnknownNode =>
-            "a tuple addon access impl targets an unknown node type",
-        TraitTupleAddonAccessImplWhereClauseMissing =>
-            "a tuple addon access impl is missing its required where clause",
-        TraitTupleAddonAccessImplInconsistentWhereClausePreds =>
-            "a tuple addon access impl contains inconsistent where clause predicates",
-        TraitTupleAddonAccessImplNotTypePred =>
-            "a tuple addon access impl where clause does not contain a type predicate",
-        TraitTupleAddonAccessImplTypePredNotSelf =>
-            "a tuple addon access impl where clause type predicate is not bounded on Self",
-        TraitTupleAddonAccessImplSelfPredBoundsInconsistent =>
-            "a tuple addon access impl Self predicate contains inconsistent bounds",
-        TraitTupleAddonAccessImplInvalidSelfInstBound =>
-            "a tuple addon access impl Self predicate does not have the required instance tuple bound",
-        TraitTupleAddonAccessImplGenericParamsLenInvalid =>
-            "a tuple addon access impl has an invalid number of generic parameters",
-        TraitTupleAddonAccessImplHolderGenericParamTypeMissing =>
-            "a tuple addon access impl is missing its holder type parameter",
-        TraitTupleAddonAccessImplHolderParamWrongIdent =>
-            "a tuple addon access impl holder parameter has the wrong identifier",
-        TraitTupleAddonAccessImplHolderParamExtraBounds =>
-            "a tuple addon access impl holder parameter contains extra bounds",
-        TraitTupleAddonAccessImplHolderParamNotTypeBound =>
-            "a tuple addon access impl holder parameter does not have the required trait bound",
-        TraitTupleAddonAccessImplHolderParamBoundInvalid =>
-            "a tuple addon access impl holder parameter has an invalid trait bound",
-        TraitTupleAddonAccessImplLifetimeParamHasBounds =>
-            "a tuple addon access impl lifetime parameter has bounds",
-        TraitTupleAddonAccessImplLifetimeIdentInvalid =>
-            "a tuple addon access impl lifetime parameter has an invalid identifier",
-        TraitTupleAddonAccessImplTypeParamHasBounds =>
-            "a tuple addon access impl type parameter has bounds",
-        TraitTupleAddonAccessImplTypeParamIdentInvalid =>
-            "a tuple addon access impl type parameter has an invalid identifier",
-        TraitTupleAddonAccessImplConstParamInvalidDefault =>
-            "a tuple addon access impl const parameter has an invalid default",
-        TraitTupleAddonAccessImplConstParamInvalidType =>
-            "a tuple addon access impl const parameter has an invalid type",
-        TraitTupleAddonAccessImplConstParamInvalidIdent =>
-            "a tuple addon access impl const parameter has an invalid identifier",
-        TraitTupleAddonAccessImplInvalidGenericParam =>
-            "a tuple addon access impl contains an invalid generic parameter",
-        TraitTupleAddonAccessImplExtraItemsFound =>
-            "a tuple addon access impl contains unexpected extra items",
-        TraitTupleAddonAccessImplItemNotType =>
-            "a tuple addon access impl item is not a type",
-        TraitTupleAddonAccessImplItemInvalidType =>
-            "a tuple addon access impl item has an invalid type",
-        TraitTupleAddonExpectedDocTypeAliasNotFound =>
-            "an expected tuple documentation type alias was not found",
-        TraitTupleExpecteDocTypeAliasNotNotFeatureGated =>
-            "an expected tuple documentation type alias is not gated with not(feature = \"inst\")",
-        TraitTupleExpecteDocTypeAliasInvalidType =>
-            "an expected tuple documentation type alias has an invalid type",
-        TraitTupleExpecteDocTypeAliasInvalidVisibility =>
-            "an expected tuple documentation type alias has an invalid visibility",
-        TraitTupleExpecteDocTypeAliasHasNoDocs =>
-            "an expected tuple documentation type alias has no documentation",
     }
 }
 
@@ -1140,91 +865,6 @@ diagnostics!(
                 "if concrete type it must be a well-declared struct",
             ]
         },
-        ExpectedTupleTypeImpl {
-            fields: {
-                ty: Type,
-            },
-            msg: "expected a tuple type or an associated type",
-            tags: [Unsupported],
-            span: { tokens: ty },
-            help: [
-                "either give a associated type `<T as Trait>::Assoc`",
-                "or a concrete tuple type `(A, B, C)` or `(A,)` if single tuple",
-            ],
-            note: [
-                "if associated type must be trait qualified",
-                "if concrete tuple type it must be a well-declared structs",
-                "concrete tuple types must not be path qualified i.e., (module::A, module::B) not allowed, qualify elsewhere"
-            ]
-        },
-        TupleArgsAreInfered {
-            fields: {
-                attr: Attribute,
-            },
-            msg: "instance tuple does not require arguments here",
-            tags: [Unsupported],
-            span: { tokens: attr },
-            help: [
-                "as arguments are inferred remove these arguments",
-            ],
-        },
-        TupleArgMustBeStruct {
-            fields: {
-                ty: Type,
-            },
-            msg: "expected a concrete struct type, found else",
-            tags: [Unsupported],
-            span: { tokens: ty },
-            help: [
-                "use a non-path qualified struct identifier only",
-                "example: `Foo`",
-            ],
-            note: [
-                "must not be path qualified i.e., module::A not allowed, qualify elsewhere"
-            ]
-        },
-        TupleArgMustNotBeQualified {
-            fields: {
-                qself: Type,
-            },
-            msg: "expected a concrete non qualified struct type, found qualifier",
-            tags: [Unsupported],
-            span: { tokens: qself },
-            help: [
-                "use a non-path qualified struct identifier only",
-                "example: `Foo`",
-            ],
-            note: [
-                "must not be Self or Trait qualified"
-            ]
-        },
-        TupleArgPathQualifyElsewhere {
-            fields: {
-                seg: PathSegment,
-            },
-            msg: "qualify this path elsewhere",
-            tags: [Unsupported],
-            span: { tokens: seg },
-            help: [
-                "expected a non-path qualified struct identifier only",
-                "example: `Foo`",
-            ],
-            note: [
-                "use import statements to qualify this elsewhere"
-            ]
-        },
-        TupleArgGenericArgsNotSupported  {
-            fields: {
-                path_args: syn::PathArguments,
-            },
-            msg: "path arguments to concrete tuple structs not allowed",
-            tags: [Future],
-            span: { tokens: path_args },
-            help: [
-                "expected a non-path qualified, non-generic argumented struct identifier only",
-                "example: `Foo`",
-            ],
-        },
         QualifiedButNotTrait {
             fields: {
                 qself: Type,
@@ -1235,28 +875,6 @@ diagnostics!(
             help: [
                 "give a direct associated type `<T as Trait>::Assoc` which is trait qualified",
                 "or use a concrete struct path `T` or `module::T`"
-            ],
-        },
-        TupleSubAssocQualifiedButNotTrait {
-            fields: {
-                qself: Type,
-            },
-            msg: "qualifier found but not trait qualified, `as` not found",
-            tags: [Unsupported],
-            span: { tokens: qself },
-            help: [
-                "give a direct associated type `<T as Trait>::Assoc` which is trait qualified",
-            ],
-        },
-        TupleSubAssocMustBeSelfQualified {
-            fields: {
-                qself: Type,
-            },
-            msg: "qualifier found but not trait qualified, `as` not found",
-            tags: [Unsupported],
-            span: { tokens: qself },
-            help: [
-                "give a direct associated type `<T as Trait>::Assoc` which is trait qualified",
             ],
         },
         GenericFoundExpectsTraitQualifier {
@@ -1306,34 +924,6 @@ diagnostics!(
                 "use instance node definition only in associated types",
             ],
         },
-        TupleOnlyInTypeAssoc {
-            fields: {
-                attr: Attribute,
-            },
-            msg: "instance tuple attribute annotation only given via a associated type, found else",
-            tags: [Unsupported],
-            span: { tokens: attr },
-            help: [
-                "use instance tuple definition only in associated types",
-            ],
-        },
-        InstEitherTraitOrNodeOrTuple {
-            fields: {
-            },
-            msg: "inst attribute is provided either for defining the trait's instance impl or defining instance node or instance tuple associated",
-            tags: [Unsupported],
-            span: { span: &Span::call_site() },
-            help: [
-                "use #[inst] to define this instance trait with instance arguments or define instance node or instance tuple associated types, found none",
-                "can remove this attribute to avoid ambiguity if none-such requirement exists",
-            ],
-            note: [
-                "either declare idents as params to define the instance trait's impl `#[inst(<params>)]`",
-                "where <params> are comma seperated ident or indexed ident list `ident, ident[i]` where i is the index counter",
-                "or define an instance node via `#[node(..)]` in an associated type with instance arguments",
-                "or define an instance tuple via `#[tuple]` in an associated type",
-            ],
-        },
         DoubleNode {
             fields: {
                 attr: Attribute,
@@ -1343,39 +933,6 @@ diagnostics!(
             span: { tokens: attr },
             help: [
                 "found multiple node annotations, keep only one",
-            ],
-        },
-        EitherTupleOrNode {
-            fields: {
-                attr: Attribute,
-            },
-            msg: "either provide instance tuple or instance node attribute annotation, found both",
-            tags: [Unsupported],
-            span: { tokens: attr },
-            note: [
-                "keep any one annotation, in case of lower level control use instance node",
-            ],
-        },
-        WhereClauseNotSupportInTuple {
-            fields: {
-                where_: WhereClause,
-            },
-            msg: "where clauses are not yet supported in instance tuple assoc types",
-            tags: [Unsupported],
-            span: { tokens: where_ },
-            help : [
-                "remove the where clause"
-            ],
-        },
-        DoubleTuple {
-            fields: {
-                attr: Attribute,
-            },
-            msg: "only one instance tuple attribute annotation is allowed",
-            tags: [Unsupported],
-            span: { tokens: attr },
-            help: [
-                "found multiple tuple annotations, keep only one",
             ],
         },
     }
@@ -1421,8 +978,6 @@ bug_diagnostics! {
             "expected a trait impl with angle generic arguments for instance impl macro",
         NodeAttrNotRemoved =>
             "node attribute annotation on type-assoc not removed",
-        TupleAttrNotRemoved =>
-            "tuple attribute annotation on type-assoc not removed",
         TransformedFileInconsistent =>
             "transformed file contains an inconsistent number of impl items",
         TransformedFileShouldNotHaveDocTarget =>
@@ -1477,14 +1032,6 @@ bug_diagnostics! {
             "expected publisher inst-node impl type attribute to have args",
         ExpectedNodeTypeImplSubAttrPath =>
             "expected subscriber inst-node impl type attribute to not have args",
-        EitherTupleOrNode =>
-            "allowed both tuple and node instance in a single assoc type",
-        InconsistencyFindingTupleAttribute =>
-            "inconsistency finding instance tuple attribute annotation in impl",
-        ExpectedTupleTypeImpl => 
-            "expected a tuple type or an associated type for instance tuple impl type resolution",
-        TupleSubAssocQualifiedButNotTrait =>
-            "tuple node associated type is not qualified via a trait",
         DocFileTooManyItemsToTransform =>
             "a doc impl file contains too many items to transform",
         DocFileContainsNoImpl =>
@@ -1493,47 +1040,6 @@ bug_diagnostics! {
             "a doc impl is missing the required not-inst (doc-only) feature attribute",
         DocFileExpectedToBeEmpty =>
             "a doc impl file is expected to be empty",
-
-        ImplTupleAddonNotInstFeatureGated =>
-            "a tuple addon is not gated with feature `inst`",
-        ImplTupleAddonNonCamelCaseAttrMissing =>
-            "a tuple addon is missing the required non-camel-case-types allow attribute",
-        TupleEnumAddonInstImplsInconsistent =>
-            "a tuple addon enum does not have a corresponding instance impl for each variant",
-        TupleEnumAddonInstImplItemsExtraFound =>
-            "a tuple addon instance impl contains unexpected extra items",
-        ImplTupleAddonInstImplNotInstAttributed =>
-            "a tuple addon instance impl is missing the required inst attribute",
-        ImplTupleAddonInstImplInstArgInconsistent =>
-            "a tuple addon instance impl contains an inconsistent inst argument",
-        ImplTupleAddonInstImplNotTraitImpl =>
-            "a tuple addon instance impl does not implement a trait",
-        ImplTupleAddonInstTraitImplInvalidTrait =>
-            "a tuple addon instance impl implements an invalid trait",
-        TupleEnumAddonInstImplItemNotType =>
-            "a tuple addon instance impl item is not a type",
-        TupleEnumAddonInstImplItemTypeInvalid =>
-            "a tuple addon instance impl Variant type is invalid",
-        TupleEnumAddonInstImplItemIdentInvalid =>
-            "a tuple addon instance impl item has an invalid identifier",
-        TupleEnumAddonVariantIndexInvalid =>
-            "a tuple addon enum variant has an invalid instance index",
-        TupleEnumAddonVariantIdentInvalid =>
-            "a tuple addon enum variant has an invalid identifier",
-        TupleEnumAddonVariantFieldsNotUnamed =>
-            "a tuple addon enum variant does not have unnamed fields",
-        TupleEnumAddonVariantFieldInconsistent =>
-            "a tuple addon enum variant does not contain exactly one field",
-        TupleEnumAddonVariantTypeInvalid =>
-            "a tuple addon enum variant field has an invalid type",
-        TupleEnumInstNodeTypeNotFound =>
-            "a tuple addon instance node type was not found",
-        TupleEnumInstNodeTypePubNodeAttrsNotFound =>
-            "a tuple addon instance node type is missing the required publisher node attribute",        
-        TupleEnumAddonVariantLastInstPunctNotTerminated =>
-            "the last tuple enum variant instance specification is not terminated with a semicolon",
-        TupleEnumAddonVariantInstPunctInvalid =>
-            "a non-last tuple enum variant instance specification is incorrectly terminated with a semicolon",
 
     }
 }
@@ -1579,17 +1085,6 @@ diagnostics!(
                 "examples for an instance access module with instance parameters `Module[l], Function[m]`: \
                     `(Crypto, {Function})`, \
                     `({Module}, {Function})`",
-            ]
-        },
-        TupleOnlyAllowedInInstTraitImpl {
-            fields: {
-                attr: Attribute,
-            },
-            msg: "instance tuple node is only allowed in traits and impls, not in instance accessor module containing impls",
-            tags: [Unsupported],
-            span: { tokens: attr },
-            note: [
-                "remove this instance tuple attribute annotation",
             ]
         },
         NodeRequiresArgsNotValue {
@@ -1677,8 +1172,6 @@ bug_diagnostics! {
             "instance access impl documentation item contains no documentation",
         ItemNotDocTargetHasNoDocs =>
             "instance access not-doc target impl item contains no documentation",
-        TupleOnlyAllowedInInstTraitImpl =>
-            "instance tuple node only allowed in instance traits and impls",
     }
 }
 
