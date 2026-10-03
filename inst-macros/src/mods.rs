@@ -303,9 +303,11 @@ impl Transformation<ItemMod, InstAccess> for ModInst {
                     if node_attr.is_some() {
                         return Err(ModError::DoubleNode { attr: attr.clone() }.into());
                     }
-
                     node_attr = Some(attr.clone());
                 } else {
+                    if let Some(node_attr) = node_attr {
+                        return Err(ModError::OtherAttrsOnTopOfNode {attr: node_attr.clone()}.into())
+                    }
                     build.push(attr.clone());
                 }
             }
@@ -479,6 +481,7 @@ impl Transformation<ItemMod, InstAccess> for ModInst {
                         attrs.insert(0,Inst::not_feature());
 
                     }
+                    Inst::delegate_attribute(attrs);
                 }
 
                 impl_.attrs.retain(|attr| !attr.path().is_ident(&node));

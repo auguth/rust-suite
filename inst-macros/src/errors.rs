@@ -261,6 +261,7 @@ error_spaces! {
             ItemDocTargetAttrNotFound,
             ItemDocTargetHasNoDocs,
             ItemNotDocTargetHasNoDocs,
+            OtherAttrsOnTopOfNode,
         }
     }
 
@@ -1137,6 +1138,18 @@ diagnostics!(
             help: [
                 "provide a `where` clause for `Self` with the implementing associated type's instance bound",
                 {format!("expected `Self: {}`", exp.to_token_stream().to_string())},
+            ],
+        },
+        OtherAttrsOnTopOfNode  {
+            fields: {
+                attr: Attribute,
+            },
+            msg: "other attributes should be top of inst node attribute",
+            tags: [Unsupported],
+            span: { tokens: attr },
+            help: [
+                "instance proc macro phase removes the impl header, \
+                so other attribute transformations should occur earlier",
             ],
         },
     }

@@ -172,16 +172,12 @@ pub(crate) const DELEGATE_MACRO_NAME: &'static str = "delegate_support_crate_int
 /// Proc-Macro Comment (TBD)
 #[proc_macro_attribute]
 pub fn delegate_support_crate_internal_only(_: TokenStream, tokens: TokenStream) -> TokenStream {
-    let mut item = match InstItem::checked_extract(&tokens.into(), &()) {
+    let mut item = match syn::parse::<Item>(tokens) {
         Ok(item) => item,
-        Err(err) => return err.into(),
+        Err(err) => return err.into_compile_error().into(),
     };
 
-    match &mut item {
-        InstItem::Trait(item_trait) => Inst::delegate_inner(item_trait),
-        InstItem::Impl(item_impl) => Inst::delegate_inner(item_impl),
-        InstItem::Mod(item_mod) => Inst::delegate_inner(item_mod),
-    };
+    Inst::delegate_inner(&mut item);
 
     quote! { #item }.into()
 }
